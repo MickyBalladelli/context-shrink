@@ -18,6 +18,7 @@
   ],
   "activationEvents": [
     "onCommand:contextshrink.generateContext",
+    "onCommand:contextshrink.generateAndAsk",
     "onCommand:contextshrink.copyContext",
     "onCommand:contextshrink.openContext"
   ],
@@ -26,11 +27,15 @@
     "commands": [
       {
         "command": "contextshrink.generateContext",
-        "title": "ContextShrink: Generate Copilot Context"
+        "title": "ContextShrink: Generate Context"
+      },
+      {
+        "command": "contextshrink.generateAndAsk",
+        "title": "ContextShrink: Generate and Ask"
       },
       {
         "command": "contextshrink.copyContext",
-        "title": "ContextShrink: Copy Copilot Context"
+        "title": "ContextShrink: Copy Context Prompt"
       },
       {
         "command": "contextshrink.openContext",

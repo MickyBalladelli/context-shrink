@@ -1,19 +1,5 @@
 # TODO
 
-## Highest Value
-
-- [x] Add `--stats` to show true token savings:
-  - `raw_tokens`
-  - `shrunk_tokens`
-  - `tokens_saved`
-  - `saving_percent`
-  - `files_scanned`
-- [x] Add `--summary` output after each run:
-  - output file path
-  - files included
-  - selected compression level
-  - output tokens vs budget
-
 ## Tests
 
 - Add parser snapshot tests for:
@@ -27,17 +13,6 @@
   - stable file ordering
 - Add formatter tests for XML escaping.
 - Add walker tests for ignored files and supported extensions.
-
-## VS Code Extension
-
-- Add a clearer command for end-to-end use:
-  - `ContextShrink: Generate and Ask`
-- Improve command names so they are not Copilot-only.
-- Show better success output:
-  - generated file path
-  - approximate token count
-  - next step for Copilot, ChatGPT, or Codex in VS Code
-- Make binary discovery simpler and more reliable.
 
 ## Language And File Support
 

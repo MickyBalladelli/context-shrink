@@ -264,9 +264,9 @@ Helper command:
 claude/contextshrink/bin/contextshrink-claude . 12000 2 /tmp/contextshrink.xml
 ```
 
-## Copilot Plugin
+## VS Code Extension
 
-GitHub Copilot does not use Codex plugins. For Copilot, this repo includes a VS Code extension:
+This repo includes a VS Code extension for generating ContextShrink XML for Copilot Chat, ChatGPT, or Codex in VS Code:
 
 ```text
 copilot/contextshrink-vscode
@@ -275,14 +275,17 @@ copilot/contextshrink-vscode
 It adds Command Palette actions:
 
 ```text
-ContextShrink: Generate Copilot Context
-ContextShrink: Copy Copilot Context
+ContextShrink: Generate Context
+ContextShrink: Generate and Ask
+ContextShrink: Copy Context Prompt
 ContextShrink: Open Last Context
 ```
 
-`Generate` writes XML and opens it. It copies a short prompt telling Copilot to use the opened XML.
+`Generate Context` writes XML, opens it, and copies a short prompt.
 
-`Copy` writes XML and copies the full XML prompt to clipboard, ready to paste into Copilot Chat.
+`Generate and Ask` writes XML, opens it, copies the full prompt, and opens VS Code chat when available.
+
+`Copy Context Prompt` writes XML and copies the full XML prompt to clipboard, ready to paste into Copilot Chat, ChatGPT, or Codex in VS Code.
 
 `Open Last Context` opens the last generated output file.
 
@@ -352,17 +355,17 @@ copilot/contextshrink-vscode/contextshrink-vscode-0.1.0.vsix
 
 Restart VS Code after installing.
 
-### Use With Copilot Chat
+### Use With VS Code Chat
 
 Open the repo in VS Code.
 
 Run Command Palette:
 
 ```text
-ContextShrink: Copy Copilot Context
+ContextShrink: Generate and Ask
 ```
 
-Paste into Copilot Chat, then ask your question.
+If chat does not open automatically, paste the copied prompt into Copilot Chat, ChatGPT, or Codex in VS Code.
 
 Smoke test:
 
@@ -375,10 +378,10 @@ If Copilot answers from the XML, the extension works.
 For smaller clipboard payload, run:
 
 ```text
-ContextShrink: Generate Copilot Context
+ContextShrink: Generate Context
 ```
 
-Then ask Copilot:
+Then ask VS Code chat:
 
 ```text
 Use the opened ContextShrink XML as compressed repo context and summarize the architecture.

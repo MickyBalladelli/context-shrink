@@ -11,19 +11,33 @@ type ContextShrinkConfig = {
   outputFile: string
 }
 
+type GeneratedContext = {
+  approxTokens: number
+  outputFile: string
+}
+
 export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('contextshrink.generateContext', async () => {
-      const outputFile = await generateContext(context)
-      await openContextFile(outputFile)
-      await vscode.env.clipboard.writeText(buildCopilotPrompt(outputFile))
-      vscode.window.showInformationMessage('ContextShrink context generated. Prompt copied for Copilot Chat.')
+      const generated = await generateContext(context)
+      await openContextFile(generated.outputFile)
+      await vscode.env.clipboard.writeText(buildContextPrompt(generated.outputFile))
+      showSuccessMessage(generated, 'Prompt copied. Paste it into Copilot Chat, ChatGPT, or Codex in VS Code.')
+    }),
+    vscode.commands.registerCommand('contextshrink.generateAndAsk', async () => {
+      const generated = await generateContext(context)
+      const xml = await fs.readFile(generated.outputFile, 'utf8')
+      const prompt = buildContextPrompt(generated.outputFile, xml)
+      await openContextFile(generated.outputFile)
+      await vscode.env.clipboard.writeText(prompt)
+      await openChat(prompt)
+      showSuccessMessage(generated, 'Chat opened when available. Prompt also copied.')
     }),
     vscode.commands.registerCommand('contextshrink.copyContext', async () => {
-      const outputFile = await generateContext(context)
-      const xml = await fs.readFile(outputFile, 'utf8')
-      await vscode.env.clipboard.writeText(buildCopilotPrompt(outputFile, xml))
-      vscode.window.showInformationMessage('ContextShrink XML copied. Paste into Copilot Chat.')
+      const generated = await generateContext(context)
+      const xml = await fs.readFile(generated.outputFile, 'utf8')
+      await vscode.env.clipboard.writeText(buildContextPrompt(generated.outputFile, xml))
+      showSuccessMessage(generated, 'Full XML prompt copied. Paste it into Copilot Chat, ChatGPT, or Codex in VS Code.')
     }),
     vscode.commands.registerCommand('contextshrink.openContext', async () => {
       const outputFile = getConfig().outputFile
@@ -34,7 +48,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {}
 
-async function generateContext(context: vscode.ExtensionContext): Promise<string> {
+async function generateContext(context: vscode.ExtensionContext): Promise<GeneratedContext> {
   const workspaceRoot = getWorkspaceRoot()
   const config = getConfig()
   const binaryPath = await resolveBinaryPath(context, config.binaryPath)
@@ -51,7 +65,11 @@ async function generateContext(context: vscode.ExtensionContext): Promise<string
     config.outputFile
   ])
 
-  return config.outputFile
+  const xml = await fs.readFile(config.outputFile, 'utf8')
+  return {
+    approxTokens: approximateTokenCount(xml),
+    outputFile: config.outputFile
+  }
 }
 
 function getWorkspaceRoot(): string {
@@ -78,14 +96,25 @@ async function resolveBinaryPath(context: vscode.ExtensionContext, configuredPat
     return expandedConfiguredPath
   }
 
-  const repoBinary = path.resolve(context.extensionPath, '..', '..', 'target', 'release', 'contextshrink')
-  if (await isExecutable(repoBinary)) {
-    return repoBinary
+  const envBinary = expandHome(process.env.CONTEXTSHRINK_BIN?.trim() ?? '')
+  if (envBinary) {
+    return envBinary
   }
 
-  const homeBinary = path.join(os.homedir(), 'dev', 'context-shrink', 'target', 'release', 'contextshrink')
-  if (await isExecutable(homeBinary)) {
-    return homeBinary
+  const pathBinary = await findExecutableOnPath('contextshrink')
+  if (pathBinary) {
+    return pathBinary
+  }
+
+  const candidates = [
+    path.resolve(context.extensionPath, '..', '..', 'target', 'release', 'contextshrink'),
+    path.join(os.homedir(), 'dev', 'context-shrink', 'target', 'release', 'contextshrink')
+  ]
+
+  for (const candidate of candidates) {
+    if (await isExecutable(candidate)) {
+      return candidate
+    }
   }
 
   return 'contextshrink'
@@ -93,11 +122,27 @@ async function resolveBinaryPath(context: vscode.ExtensionContext, configuredPat
 
 async function isExecutable(filePath: string): Promise<boolean> {
   try {
-    await fs.access(filePath)
+    await fs.access(filePath, fs.constants.X_OK)
     return true
   } catch {
     return false
   }
+}
+
+async function findExecutableOnPath(name: string): Promise<string | undefined> {
+  const pathValue = process.env.PATH ?? ''
+  for (const directory of pathValue.split(path.delimiter)) {
+    if (!directory) {
+      continue
+    }
+
+    const candidate = path.join(directory, name)
+    if (await isExecutable(candidate)) {
+      return candidate
+    }
+  }
+
+  return undefined
 }
 
 function expandHome(value: string): string {
@@ -142,10 +187,28 @@ async function openContextFile(outputFile: string): Promise<void> {
   await vscode.window.showTextDocument(document, { preview: false })
 }
 
-function buildCopilotPrompt(outputFile: string, xml?: string): string {
+async function openChat(prompt: string): Promise<void> {
+  try {
+    await vscode.commands.executeCommand('workbench.action.chat.open', prompt)
+  } catch {
+    await vscode.commands.executeCommand('workbench.action.chat.open')
+  }
+}
+
+function buildContextPrompt(outputFile: string, xml?: string): string {
   if (xml) {
-    return `Use this ContextShrink XML as compressed repository context, then answer my next question.\n\n${xml}`
+    return `Use this ContextShrink XML as compressed repository context for Copilot Chat, ChatGPT, or Codex in VS Code, then answer my next question.\n\n${xml}`
   }
 
-  return `Use the ContextShrink XML opened at ${outputFile} as compressed repository context, then answer my next question.`
+  return `Use the ContextShrink XML opened at ${outputFile} as compressed repository context for Copilot Chat, ChatGPT, or Codex in VS Code, then answer my next question.`
+}
+
+function approximateTokenCount(text: string): number {
+  return Math.ceil(text.length / 4)
+}
+
+function showSuccessMessage(generated: GeneratedContext, nextStep: string): void {
+  vscode.window.showInformationMessage(
+    `ContextShrink wrote ${generated.outputFile} (~${generated.approxTokens} tokens). ${nextStep}`
+  )
 }

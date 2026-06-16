@@ -19,11 +19,17 @@ On some machines, `code` points to Cursor. Use the full VS Code path when you wa
 Use Command Palette:
 
 ```text
-ContextShrink: Generate Copilot Context
+ContextShrink: Generate Context
 ```
 
 or:
 
 ```text
-ContextShrink: Copy Copilot Context
+ContextShrink: Generate and Ask
+```
+
+or:
+
+```text
+ContextShrink: Copy Context Prompt
 ```
