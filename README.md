@@ -4,6 +4,45 @@
 
 ContextShrink reduces the number of tokens needed to run LLM queries over a codebase. It walks a repo, parses code with tree-sitter, shrinks source into skeletons or tree maps, counts tokens, then writes XML for LLM context.
 
+## Why Use This?
+
+Copilot, Codex, Claude Code, and other coding agents already do some context selection and shrinking. ContextShrink does not replace that.
+
+ContextShrink is useful when you want explicit, inspectable, repeatable repo context:
+
+```text
+You control the token budget.
+You can inspect exactly what was included.
+The same repo and flags produce the same context.
+The output works across Copilot, Codex, Claude, ChatGPT, and other LLMs.
+Repo-wide questions get a broad project map before file contents.
+Bad answers are easier to debug because you can inspect what the model saw.
+```
+
+Best use cases:
+
+```text
+Summarize this project.
+Explain the architecture.
+Find likely entry points.
+Prepare context before asking another LLM.
+Compare token savings before sending repo context.
+```
+
+Less useful for:
+
+```text
+Fix this exact function.
+Edit one file.
+Ask about currently open code.
+```
+
+In summary:
+
+```text
+ContextShrink is a deterministic context preprocessor for visible, budgeted, repo-wide LLM context.
+```
+
 ## Build
 
 Install Rust first:
