@@ -1,5 +1,7 @@
 node_modules/
 src/
+dist/*.smoke.test.js
+dist/*.smoke.test.js.map
 tsconfig.json
 .gitignore
 *.vsix

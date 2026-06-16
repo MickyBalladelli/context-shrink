@@ -596,6 +596,8 @@ It adds Command Palette actions:
 ContextShrink: Generate Context
 ContextShrink: Generate and Ask
 ContextShrink: Copy Context Prompt
+ContextShrink: Copy Project Map
+ContextShrink: Preview Project Map
 ContextShrink: Open Last Context
 ```
 
@@ -604,6 +606,10 @@ ContextShrink: Open Last Context
 `Generate and Ask` writes XML, opens it, copies the full prompt, and opens VS Code chat when available.
 
 `Copy Context Prompt` writes XML and copies the full XML prompt to clipboard, ready to paste into Copilot Chat, ChatGPT, or Codex in VS Code.
+
+`Copy Project Map` writes context and copies only the project map with paths, levels, and token counts.
+
+`Preview Project Map` writes context and opens a VS Code webview preview of paths, levels, and token counts.
 
 `Open Last Context` opens the last generated output file.
 
@@ -721,6 +727,10 @@ Settings:
 contextshrink.maxTokens
 contextshrink.level
 contextshrink.outputFile
+contextshrink.outputFormat
+contextshrink.include
+contextshrink.exclude
+contextshrink.respectGitignore
 contextshrink.binaryPath
 ```
 

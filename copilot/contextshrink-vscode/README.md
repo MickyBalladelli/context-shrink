@@ -41,3 +41,15 @@ or:
 ```text
 ContextShrink: Copy Context Prompt
 ```
+
+or:
+
+```text
+ContextShrink: Preview Project Map
+```
+
+or:
+
+```text
+ContextShrink: Copy Project Map
+```

@@ -40,18 +40,6 @@
 - Add optional per-directory summaries.
 - Add schema docs for XML and JSON output.
 
-## VS Code Extension
-
-- Show stats in the success message using real CLI `--summary --stats` output.
-- Add settings for:
-  - include globs
-  - exclude globs
-  - output format
-  - respect gitignore
-- Add a webview preview for project map and token counts.
-- Add a command that copies only the project map.
-- Add integration smoke tests for extension commands.
-
 ## Testing
 
 - Add CLI integration tests that execute the binary with temp repos.

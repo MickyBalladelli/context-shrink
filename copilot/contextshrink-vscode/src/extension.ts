@@ -4,16 +4,23 @@ import * as os from 'os'
 import * as path from 'path'
 import * as vscode from 'vscode'
 
-type ContextShrinkConfig = {
-  binaryPath: string
-  level: number
-  maxTokens: number
-  outputFile: string
-}
+import {
+  buildContextPrompt,
+  buildContextShrinkArgs,
+  buildProjectMapText,
+  buildSuccessMessage,
+  ContextShrinkConfig,
+  extractProjectMap,
+  parseRunReport,
+  ProjectMapEntry,
+  RunReport
+} from './contextshrink'
 
 type GeneratedContext = {
-  approxTokens: number
+  contextText: string
   outputFile: string
+  projectMap: ProjectMapEntry[]
+  report: RunReport
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -26,8 +33,7 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('contextshrink.generateAndAsk', async () => {
       const generated = await generateContext(context)
-      const xml = await fs.readFile(generated.outputFile, 'utf8')
-      const prompt = buildContextPrompt(generated.outputFile, xml)
+      const prompt = buildContextPrompt(generated.outputFile, generated.contextText)
       await openContextFile(generated.outputFile)
       await vscode.env.clipboard.writeText(prompt)
       await openChat(prompt)
@@ -35,9 +41,18 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('contextshrink.copyContext', async () => {
       const generated = await generateContext(context)
-      const xml = await fs.readFile(generated.outputFile, 'utf8')
-      await vscode.env.clipboard.writeText(buildContextPrompt(generated.outputFile, xml))
-      showSuccessMessage(generated, 'Full XML prompt copied. Paste it into Copilot Chat, ChatGPT, or Codex in VS Code.')
+      await vscode.env.clipboard.writeText(buildContextPrompt(generated.outputFile, generated.contextText))
+      showSuccessMessage(generated, 'Full context prompt copied. Paste it into Copilot Chat, ChatGPT, or Codex in VS Code.')
+    }),
+    vscode.commands.registerCommand('contextshrink.copyProjectMap', async () => {
+      const generated = await generateContext(context)
+      await vscode.env.clipboard.writeText(buildProjectMapText(generated.projectMap))
+      showSuccessMessage(generated, 'Project map copied.')
+    }),
+    vscode.commands.registerCommand('contextshrink.previewProjectMap', async () => {
+      const generated = await generateContext(context)
+      showProjectMapPreview(context, generated)
+      showSuccessMessage(generated, 'Project map preview opened.')
     }),
     vscode.commands.registerCommand('contextshrink.openContext', async () => {
       const outputFile = getConfig().outputFile
@@ -52,23 +67,14 @@ async function generateContext(context: vscode.ExtensionContext): Promise<Genera
   const workspaceRoot = getWorkspaceRoot()
   const config = getConfig()
   const binaryPath = await resolveBinaryPath(context, config.binaryPath)
+  const stdout = await runContextShrink(binaryPath, buildContextShrinkArgs(workspaceRoot, config))
+  const contextText = await fs.readFile(config.outputFile, 'utf8')
 
-  await runContextShrink(binaryPath, [
-    workspaceRoot,
-    '--max-tokens',
-    String(config.maxTokens),
-    '--level',
-    String(config.level),
-    '--output',
-    'file',
-    '--output-file',
-    config.outputFile
-  ])
-
-  const xml = await fs.readFile(config.outputFile, 'utf8')
   return {
-    approxTokens: approximateTokenCount(xml),
-    outputFile: config.outputFile
+    contextText,
+    outputFile: config.outputFile,
+    projectMap: extractProjectMap(contextText, config.outputFormat),
+    report: parseRunReport(stdout)
   }
 }
 
@@ -84,9 +90,13 @@ function getConfig(): ContextShrinkConfig {
   const config = vscode.workspace.getConfiguration('contextshrink')
   return {
     binaryPath: config.get<string>('binaryPath', ''),
+    exclude: config.get<string[]>('exclude', []),
+    include: config.get<string[]>('include', []),
     level: config.get<number>('level', 2),
     maxTokens: config.get<number>('maxTokens', 12000),
-    outputFile: expandHome(config.get<string>('outputFile', '/tmp/contextshrink-vscode.xml'))
+    outputFile: expandHome(config.get<string>('outputFile', '/tmp/contextshrink-vscode.xml')),
+    outputFormat: config.get<'json' | 'xml'>('outputFormat', 'xml'),
+    respectGitignore: config.get<boolean>('respectGitignore', true)
   }
 }
 
@@ -155,7 +165,7 @@ function expandHome(value: string): string {
   return value
 }
 
-function runContextShrink(binaryPath: string, args: string[]): Promise<void> {
+function runContextShrink(binaryPath: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = cp.spawn(binaryPath, args, {
       cwd: getWorkspaceRoot(),
@@ -163,6 +173,11 @@ function runContextShrink(binaryPath: string, args: string[]): Promise<void> {
     })
 
     let stderr = ''
+    let stdout = ''
+
+    child.stdout.on('data', chunk => {
+      stdout += chunk.toString()
+    })
 
     child.stderr.on('data', chunk => {
       stderr += chunk.toString()
@@ -174,7 +189,7 @@ function runContextShrink(binaryPath: string, args: string[]): Promise<void> {
 
     child.on('close', code => {
       if (code === 0) {
-        resolve()
+        resolve(stdout)
         return
       }
       reject(new Error(`ContextShrink failed with exit code ${code}: ${stderr}`))
@@ -195,20 +210,53 @@ async function openChat(prompt: string): Promise<void> {
   }
 }
 
-function buildContextPrompt(outputFile: string, xml?: string): string {
-  if (xml) {
-    return `Use this ContextShrink XML as compressed repository context for Copilot Chat, ChatGPT, or Codex in VS Code, then answer my next question.\n\n${xml}`
-  }
-
-  return `Use the ContextShrink XML opened at ${outputFile} as compressed repository context for Copilot Chat, ChatGPT, or Codex in VS Code, then answer my next question.`
-}
-
-function approximateTokenCount(text: string): number {
-  return Math.ceil(text.length / 4)
-}
-
 function showSuccessMessage(generated: GeneratedContext, nextStep: string): void {
-  vscode.window.showInformationMessage(
-    `ContextShrink wrote ${generated.outputFile} (~${generated.approxTokens} tokens). ${nextStep}`
+  vscode.window.showInformationMessage(buildSuccessMessage(generated.outputFile, generated.report, nextStep))
+}
+
+function showProjectMapPreview(context: vscode.ExtensionContext, generated: GeneratedContext): void {
+  const panel = vscode.window.createWebviewPanel(
+    'contextshrinkProjectMap',
+    'ContextShrink Project Map',
+    vscode.ViewColumn.Beside,
+    { enableScripts: false }
   )
+  panel.webview.html = buildProjectMapHtml(generated)
+  context.subscriptions.push(panel)
+}
+
+function buildProjectMapHtml(generated: GeneratedContext): string {
+  const rows = generated.projectMap
+    .map(entry => `<tr><td>${escapeHtml(entry.path)}</td><td>${entry.level}</td><td>${entry.tokens}</td></tr>`)
+    .join('')
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 16px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border-bottom: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+    th { position: sticky; top: 0; background: var(--vscode-editor-background); }
+    td:nth-child(2), td:nth-child(3) { text-align: right; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <h1>ContextShrink Project Map</h1>
+  <p>${escapeHtml(generated.outputFile)}</p>
+  <table>
+    <thead><tr><th>Path</th><th>Level</th><th>Tokens</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+</body>
+</html>`
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }

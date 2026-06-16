@@ -20,6 +20,8 @@
     "onCommand:contextshrink.generateContext",
     "onCommand:contextshrink.generateAndAsk",
     "onCommand:contextshrink.copyContext",
+    "onCommand:contextshrink.copyProjectMap",
+    "onCommand:contextshrink.previewProjectMap",
     "onCommand:contextshrink.openContext"
   ],
   "main": "./dist/extension.js",
@@ -36,6 +38,14 @@
       {
         "command": "contextshrink.copyContext",
         "title": "ContextShrink: Copy Context Prompt"
+      },
+      {
+        "command": "contextshrink.copyProjectMap",
+        "title": "ContextShrink: Copy Project Map"
+      },
+      {
+        "command": "contextshrink.previewProjectMap",
+        "title": "ContextShrink: Preview Project Map"
       },
       {
         "command": "contextshrink.openContext",
@@ -66,6 +76,36 @@
           "default": "/tmp/contextshrink-vscode.xml",
           "description": "File path where generated context is written."
         },
+        "contextshrink.outputFormat": {
+          "type": "string",
+          "default": "xml",
+          "enum": [
+            "xml",
+            "json"
+          ],
+          "description": "Generated context format."
+        },
+        "contextshrink.include": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "Glob patterns to include, such as src/**."
+        },
+        "contextshrink.exclude": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "Glob patterns to exclude, such as **/generated/**."
+        },
+        "contextshrink.respectGitignore": {
+          "type": "boolean",
+          "default": true,
+          "description": "Respect .gitignore, global gitignore, and git exclude files."
+        },
         "contextshrink.binaryPath": {
           "type": "string",
           "default": "",
@@ -76,6 +116,7 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
+    "test": "npm run compile && node dist/contextshrink.smoke.test.js",
     "watch": "tsc -watch -p ./",
     "package": "vsce package --no-dependencies"
   },
