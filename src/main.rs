@@ -610,3 +610,71 @@ fn print_detailed_stats(files: &[ProcessedFile], _stats: &RunStats) {
         mn, median, mean, mx
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use parser::FileVariants;
+
+    #[test]
+    fn xml_output_tokens_match_final_document() {
+        assert_final_token_count_matches(OutputFormat::Xml);
+    }
+
+    #[test]
+    fn json_output_tokens_match_final_document() {
+        assert_final_token_count_matches(OutputFormat::Json);
+    }
+
+    fn assert_final_token_count_matches(format: OutputFormat) {
+        let cli = test_cli(format);
+        let metadata = RepositoryMetadata {
+            generated_at: "1234567890".to_owned(),
+            repo_root: "/tmp/demo".to_owned(),
+            max_tokens: 12000,
+            compression_level: 2,
+            file_count: 1,
+        };
+        let files = vec![ProcessedFile::new(
+            "src/lib.rs".to_owned(),
+            CompressionLevel::Skeleton,
+            FileVariants {
+                full: Some("pub fn greet() { println!(\"hello\"); }".to_owned()),
+                skeleton: "pub fn greet() { ... }".to_owned(),
+                tree_map: "pub fn greet()".to_owned(),
+            },
+        )];
+
+        let (_files, context, output_tokens) =
+            fit_formatted_context(files, &metadata, &cli).unwrap();
+
+        assert_eq!(output_tokens, count_text_tokens(&context).unwrap());
+    }
+
+    fn test_cli(format: OutputFormat) -> Cli {
+        Cli {
+            path: PathBuf::from("."),
+            max_tokens: 12000,
+            max_file_bytes: 1_048_576,
+            level: 2,
+            output: OutputDestination::File,
+            output_file: PathBuf::from("bonsai.xml"),
+            format,
+            project_map_only: false,
+            no_content: false,
+            sort: SortMode::Path,
+            directory_summaries: false,
+            fail_over_budget: false,
+            include: Vec::new(),
+            exclude: Vec::new(),
+            respect_gitignore: true,
+            print_files: false,
+            fail_on_empty: false,
+            stats: false,
+            detailed_stats: false,
+            summary: false,
+            prompt: false,
+            ask_template: None,
+        }
+    }
+}

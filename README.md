@@ -5,7 +5,7 @@
 <p align="center">
     <a href="./LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg" /></a>
     <img alt="Language: Rust" src="https://img.shields.io/badge/Language-Rust-orange.svg" />
-    <img alt="Version" src="https://img.shields.io/badge/Version-0.2.1-lightgrey.svg" />
+    <img alt="Version" src="https://img.shields.io/badge/Version-0.3.1-lightgrey.svg" />
 </p>
 
 # Bonsai
@@ -348,7 +348,7 @@ copilot/bonsai-vscode
 Install the packaged VSIX:
 
 ```sh
-code --install-extension copilot/bonsai-vscode/bonsai-vscode-0.2.1.vsix
+code --install-extension copilot/bonsai-vscode/bonsai-vscode-0.3.1.vsix
 ```
 
 Run Command Palette:
@@ -505,8 +505,8 @@ CI and releases are configured in:
 Create a release:
 
 ```sh
-git tag v0.2.1
-git push origin v0.2.1
+git tag v0.3.1
+git push origin v0.3.1
 ```
 
 Version bump checklist:

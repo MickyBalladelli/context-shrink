@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+bin="${BONSAI_BIN:-}"
+if [[ -z "$bin" ]]; then
+  if [[ -x "$repo_root/target/debug/bonsai" ]]; then
+    bin="$repo_root/target/debug/bonsai"
+  else
+    bin="$repo_root/target/release/bonsai"
+  fi
+fi
+
+tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/bonsai-cli-integration.XXXXXX")"
+trap 'chmod -R u+rwX "$tmp_root" 2>/dev/null || true; rm -rf "$tmp_root"' EXIT
+
+normalize_xml() {
+  sed -E 's/generated_at="[0-9]+"/generated_at="TIMESTAMP"/; s#repo_root="[^"]+"#repo_root="/REPO"#' "$1"
+}
+
+normalize_json() {
+  sed -E 's/"generated_at":"[0-9]+"/"generated_at":"TIMESTAMP"/; s#"repo_root":"[^"]+"#"repo_root":"/REPO"#' "$1"
+}
+
+make_golden_repo() {
+  local repo="$1"
+  mkdir -p "$repo/src"
+  cat > "$repo/Cargo.toml" <<'TOML'
+[package]
+name = "demo"
+version = "0.1.0"
+TOML
+  cat > "$repo/src/lib.rs" <<'RS'
+pub fn greet(name: &str) -> String {
+    format!("hello {name}")
+}
+RS
+}
+
+make_flag_repo() {
+  local repo="$1"
+  mkdir -p "$repo/src" "$repo/tests"
+  mkdir -p "$repo/.git"
+  cat > "$repo/.gitignore" <<'GITIGNORE'
+ignored.rs
+GITIGNORE
+  cat > "$repo/src/lib.rs" <<'RS'
+pub fn keep() {}
+RS
+  cat > "$repo/src/skip.rs" <<'RS'
+pub fn skip() {}
+RS
+  cat > "$repo/tests/test.rs" <<'RS'
+pub fn test_only() {}
+RS
+  cat > "$repo/ignored.rs" <<'RS'
+pub fn ignored() {}
+RS
+}
+
+golden_repo="$tmp_root/golden-repo"
+make_golden_repo "$golden_repo"
+"$bin" "$golden_repo" --max-tokens 12000 --level 2 --output-file "$tmp_root/context.xml"
+normalize_xml "$tmp_root/context.xml" > "$tmp_root/context.normalized.xml"
+diff -u "$repo_root/tests/golden/context.xml" "$tmp_root/context.normalized.xml"
+
+"$bin" "$golden_repo" --max-tokens 12000 --level 2 --format json --output-file "$tmp_root/context.json"
+normalize_json "$tmp_root/context.json" > "$tmp_root/context.normalized.json"
+diff -u "$repo_root/tests/golden/context.json" "$tmp_root/context.normalized.json"
+
+flag_repo="$tmp_root/flag-repo"
+make_flag_repo "$flag_repo"
+"$bin" "$flag_repo" --include 'src/**' --exclude '**/skip.rs' --print-files --output-file "$tmp_root/filtered.xml" > "$tmp_root/filtered.txt"
+grep -Fxq 'src/lib.rs' "$tmp_root/filtered.txt"
+if grep -Eq 'skip|tests/' "$tmp_root/filtered.txt"; then
+  printf 'include/exclude selected wrong files\n' >&2
+  exit 1
+fi
+
+"$bin" "$flag_repo" --print-files --output-file "$tmp_root/respect.xml" > "$tmp_root/respect.txt"
+if grep -Fxq 'ignored.rs' "$tmp_root/respect.txt"; then
+  printf 'gitignore was not respected\n' >&2
+  exit 1
+fi
+
+"$bin" "$flag_repo" --no-respect-gitignore --print-files --output-file "$tmp_root/no-respect.xml" > "$tmp_root/no-respect.txt"
+grep -Fxq 'ignored.rs' "$tmp_root/no-respect.txt"
+
+"$bin" "$golden_repo" --prompt --output-file "$tmp_root/prompt.txt"
+grep -Fq 'Use this repo context to explain the architecture' "$tmp_root/prompt.txt"
+grep -Fq '<context>' "$tmp_root/prompt.txt"
+
+"$bin" "$golden_repo" --ask-template 'Find risks.' --output-file "$tmp_root/ask.txt"
+grep -Fq 'Find risks.' "$tmp_root/ask.txt"
+grep -Fq '<context>' "$tmp_root/ask.txt"
+
+empty_repo="$tmp_root/empty-repo"
+mkdir -p "$empty_repo"
+if "$bin" "$empty_repo" --fail-on-empty --output-file "$tmp_root/empty.xml" >/dev/null 2>&1; then
+  printf 'empty repo did not fail with --fail-on-empty\n' >&2
+  exit 1
+fi
+
+unsupported_repo="$tmp_root/unsupported-repo"
+mkdir -p "$unsupported_repo"
+printf 'hello\n' > "$unsupported_repo/notes.txt"
+if "$bin" "$unsupported_repo" --fail-on-empty --output-file "$tmp_root/unsupported.xml" >/dev/null 2>&1; then
+  printf 'unsupported-only repo did not fail with --fail-on-empty\n' >&2
+  exit 1
+fi
+
+if "$bin" "$golden_repo" --include '[' --output-file "$tmp_root/bad-glob.xml" >/dev/null 2>&1; then
+  printf 'invalid glob did not fail\n' >&2
+  exit 1
+fi
+
+unreadable_repo="$tmp_root/unreadable-repo"
+mkdir -p "$unreadable_repo"
+printf 'pub fn hidden() {}\n' > "$unreadable_repo/hidden.rs"
+chmod 000 "$unreadable_repo/hidden.rs"
+if "$bin" "$unreadable_repo" --output-file "$tmp_root/unreadable.xml" >/dev/null 2>&1; then
+  printf 'unreadable file did not fail\n' >&2
+  exit 1
+fi
+chmod 600 "$unreadable_repo/hidden.rs"
+
+printf 'cli integration passed\n'

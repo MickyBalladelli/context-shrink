@@ -1,0 +1,11 @@
+{
+  "metadata": {"generated_at":"TIMESTAMP","repo_root":"/REPO","max_tokens":12000,"compression_level":2,"file_count":2},
+  "project_map": [
+    {"path":"Cargo.toml","level":2,"tokens":17},
+    {"path":"src/lib.rs","level":2,"tokens":13}
+  ],
+  "files": [
+    {"path":"Cargo.toml","level":2,"tokens":17,"content":"[package]\nname = \"demo\"\nversion = \"0.1.0\""},
+    {"path":"src/lib.rs","level":2,"tokens":13,"content":"pub fn greet(name: &str) -> String { ... }\n"}
+  ]
+}
