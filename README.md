@@ -95,8 +95,10 @@ saving_percent = tokens_saved / raw_tokens * 100
 ContextShrink scans:
 
 ```text
-.js .jsx .ts .tsx .py .rs
+.js .jsx .ts .tsx .py .rs .go .java .cs .swift .kt .md .json .yaml .yml .toml
 ```
+
+It parses JavaScript, TypeScript, Python, and Rust with tree-sitter. Other code languages use generic declaration extraction. Docs and config files use compact line-based context instead of source-code body stripping.
 
 It respects `.gitignore` and `.cursorignore`.
 

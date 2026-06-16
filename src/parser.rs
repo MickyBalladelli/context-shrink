@@ -40,37 +40,42 @@ impl TryFrom<u8> for CompressionLevel {
 pub fn compress_file(path: &Path, _requested_level: CompressionLevel) -> Result<FileVariants> {
     let source = fs::read_to_string(path)
         .with_context(|| format!("cannot read source file {}", path.display()))?;
-    let language = language_for_path(path)?;
     let syntax = SyntaxKind::from_path(path)?;
 
-    let mut parser = Parser::new();
-    parser
-        .set_language(&language)
-        .context("cannot load parser")?;
-    let tree = parser
-        .parse(&source, None)
-        .ok_or_else(|| anyhow!("tree-sitter parse failed"))?;
-
     let full = Some(source.clone());
-    let skeleton = strip_to_skeleton(&source, tree.root_node(), syntax);
-    let tree_map = build_tree_map(&source, tree.root_node(), syntax);
+    let (skeleton, tree_map) = match syntax.language() {
+        Some(language) => {
+            let mut parser = Parser::new();
+            parser
+                .set_language(&language)
+                .context("cannot load parser")?;
+            let tree = parser
+                .parse(&source, None)
+                .ok_or_else(|| anyhow!("tree-sitter parse failed"))?;
+
+            (
+                strip_to_skeleton(&source, tree.root_node(), syntax),
+                build_tree_map(&source, tree.root_node(), syntax),
+            )
+        }
+        None => match syntax {
+            SyntaxKind::GenericBrace => (
+                strip_generic_brace_code(&source),
+                build_generic_brace_tree_map(&source),
+            ),
+            SyntaxKind::Text => (
+                compact_text_context(path, &source),
+                build_text_tree_map(path, &source),
+            ),
+            _ => unreachable!("tree-sitter language missing for parsed syntax"),
+        },
+    };
 
     Ok(FileVariants {
         full,
         skeleton,
         tree_map,
     })
-}
-
-fn language_for_path(path: &Path) -> Result<Language> {
-    match extension(path).as_deref() {
-        Some("js" | "jsx") => Ok(tree_sitter_javascript::language()),
-        Some("ts" | "tsx") => Ok(tree_sitter_typescript::language_typescript()),
-        Some("py") => Ok(tree_sitter_python::language()),
-        Some("rs") => Ok(tree_sitter_rust::language()),
-        Some(other) => bail!("unsupported extension: {other}"),
-        None => bail!("file has no extension: {}", path.display()),
-    }
 }
 
 fn extension(path: &Path) -> Option<String> {
@@ -85,6 +90,8 @@ enum SyntaxKind {
     TypeScript,
     Python,
     Rust,
+    GenericBrace,
+    Text,
 }
 
 impl SyntaxKind {
@@ -94,8 +101,20 @@ impl SyntaxKind {
             Some("ts" | "tsx") => Ok(Self::TypeScript),
             Some("py") => Ok(Self::Python),
             Some("rs") => Ok(Self::Rust),
+            Some("go" | "java" | "cs" | "swift" | "kt") => Ok(Self::GenericBrace),
+            Some("md" | "json" | "yaml" | "yml" | "toml") => Ok(Self::Text),
             Some(other) => bail!("unsupported extension: {other}"),
             None => bail!("file has no extension: {}", path.display()),
+        }
+    }
+
+    fn language(self) -> Option<Language> {
+        match self {
+            Self::JavaScript => Some(tree_sitter_javascript::language()),
+            Self::TypeScript => Some(tree_sitter_typescript::language_typescript()),
+            Self::Python => Some(tree_sitter_python::language()),
+            Self::Rust => Some(tree_sitter_rust::language()),
+            Self::GenericBrace | Self::Text => None,
         }
     }
 }
@@ -165,6 +184,7 @@ fn body_replacement(node: Node, syntax: SyntaxKind) -> Option<Replacement> {
                 None
             }
         }
+        SyntaxKind::GenericBrace | SyntaxKind::Text => None,
     }
 }
 
@@ -288,7 +308,172 @@ fn should_emit_tree_map_node(node: Node, syntax: SyntaxKind) -> bool {
                 | "static_item"
                 | "mod_item"
         ),
+        SyntaxKind::GenericBrace | SyntaxKind::Text => false,
     }
+}
+
+fn strip_generic_brace_code(source: &str) -> String {
+    let mut output = Vec::new();
+    let mut depth = 0usize;
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+        let line_depth = depth;
+
+        if line_depth == 0 && should_keep_generic_code_line(trimmed) {
+            output.push(collapse_generic_body(trimmed));
+        }
+
+        depth = update_brace_depth(depth, line);
+    }
+
+    if output.is_empty() {
+        compact_non_empty_lines(source, 120)
+    } else {
+        dedupe_preserving_order(output).join("\n")
+    }
+}
+
+fn build_generic_brace_tree_map(source: &str) -> String {
+    let lines = source
+        .lines()
+        .map(str::trim)
+        .filter(|line| should_keep_generic_code_line(line))
+        .map(collapse_generic_body)
+        .collect::<Vec<_>>();
+
+    if lines.is_empty() {
+        compact_non_empty_lines(source, 80)
+    } else {
+        dedupe_preserving_order(lines).join("\n")
+    }
+}
+
+fn should_keep_generic_code_line(line: &str) -> bool {
+    if line.is_empty() || line.starts_with("//") {
+        return false;
+    }
+
+    matches!(
+        line.split_whitespace().next(),
+        Some(
+            "package"
+                | "import"
+                | "using"
+                | "namespace"
+                | "public"
+                | "private"
+                | "protected"
+                | "internal"
+                | "class"
+                | "struct"
+                | "interface"
+                | "enum"
+                | "protocol"
+                | "extension"
+                | "func"
+                | "fun"
+                | "var"
+                | "let"
+                | "const"
+        )
+    ) || line.contains(" class ")
+        || line.contains(" struct ")
+        || line.contains(" interface ")
+        || line.contains(" enum ")
+        || line.contains(" func ")
+        || line.contains(" fun ")
+}
+
+fn collapse_generic_body(line: &str) -> String {
+    let mut collapsed = line.split_whitespace().collect::<Vec<_>>().join(" ");
+    if let Some(index) = collapsed.find('{') {
+        collapsed.truncate(index);
+        collapsed = collapsed.trim_end().to_owned();
+        collapsed.push_str(" { ... }");
+    }
+    truncate_line(collapsed, 240)
+}
+
+fn update_brace_depth(depth: usize, line: &str) -> usize {
+    line.chars()
+        .fold(depth, |depth, character| match character {
+            '{' => depth.saturating_add(1),
+            '}' => depth.saturating_sub(1),
+            _ => depth,
+        })
+}
+
+fn compact_text_context(path: &Path, source: &str) -> String {
+    if extension(path).as_deref() == Some("md") {
+        let lines = source
+            .lines()
+            .map(str::trim)
+            .filter(|line| {
+                line.starts_with('#')
+                    || line.starts_with("- ")
+                    || line.starts_with("* ")
+                    || line.starts_with("> ")
+            })
+            .map(|line| truncate_line(line.to_owned(), 240))
+            .take(160)
+            .collect::<Vec<_>>();
+
+        if !lines.is_empty() {
+            return lines.join("\n");
+        }
+    }
+
+    compact_non_empty_lines(source, 160)
+}
+
+fn build_text_tree_map(path: &Path, source: &str) -> String {
+    match extension(path).as_deref() {
+        Some("md") => {
+            let headings = source
+                .lines()
+                .map(str::trim)
+                .filter(|line| line.starts_with('#'))
+                .map(|line| truncate_line(line.to_owned(), 240))
+                .take(120)
+                .collect::<Vec<_>>();
+
+            if headings.is_empty() {
+                compact_non_empty_lines(source, 80)
+            } else {
+                headings.join("\n")
+            }
+        }
+        Some("json" | "yaml" | "yml" | "toml") => compact_config_lines(source),
+        _ => compact_non_empty_lines(source, 80),
+    }
+}
+
+fn compact_config_lines(source: &str) -> String {
+    source
+        .lines()
+        .map(str::trim)
+        .filter(|line| {
+            !line.is_empty()
+                && !line.starts_with('#')
+                && !line.starts_with("//")
+                && !matches!(*line, "{" | "}" | "[" | "]" | "," | "},")
+        })
+        .map(|line| truncate_line(line.to_owned(), 240))
+        .take(160)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn compact_non_empty_lines(source: &str, max_lines: usize) -> String {
+    source
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(|line| truncate_line(line.to_owned(), 240))
+        .take(max_lines)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn compact_node_line(source: &str, node: Node) -> Option<String> {
@@ -303,12 +488,22 @@ fn compact_node_line(source: &str, node: Node) -> Option<String> {
         .collect::<Vec<_>>()
         .join(" ");
 
-    if line.len() > 240 {
-        line.truncate(237);
-        line.push_str("...");
-    }
+    line = truncate_line(line, 240);
 
     (!line.is_empty()).then_some(line)
+}
+
+fn truncate_line(line: String, max_len: usize) -> String {
+    if line.chars().count() <= max_len {
+        return line;
+    }
+
+    let mut truncated = line
+        .chars()
+        .take(max_len.saturating_sub(3))
+        .collect::<String>();
+    truncated.push_str("...");
+    truncated
 }
 
 fn dedupe_preserving_order(lines: Vec<String>) -> Vec<String> {

@@ -160,7 +160,10 @@ fn print_summary(stats: &RunStats) {
     println!("  output: {}", stats.output_target);
     println!("  files_included: {}", stats.files_scanned);
     println!("  selected_level: {}", stats.selected_level.as_u8());
-    println!("  output_tokens: {} / {}", stats.shrunk_tokens, stats.max_tokens);
+    println!(
+        "  output_tokens: {} / {}",
+        stats.shrunk_tokens, stats.max_tokens
+    );
 }
 
 fn print_stats(stats: &RunStats) {

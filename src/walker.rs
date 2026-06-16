@@ -4,7 +4,10 @@ use std::sync::Mutex;
 use anyhow::{Context, Result};
 use ignore::{DirEntry, WalkBuilder, WalkState};
 
-const TARGET_EXTENSIONS: &[&str] = &["js", "jsx", "ts", "tsx", "py", "rs"];
+const TARGET_EXTENSIONS: &[&str] = &[
+    "js", "jsx", "ts", "tsx", "py", "rs", "go", "java", "cs", "swift", "kt", "md", "json", "yaml",
+    "yml", "toml",
+];
 
 pub fn collect_code_files(root: &Path) -> Result<Vec<PathBuf>> {
     let files = Mutex::new(Vec::new());
@@ -56,5 +59,6 @@ fn is_target_file(entry: &DirEntry) -> bool {
             .path()
             .extension()
             .and_then(|extension| extension.to_str())
-            .is_some_and(|extension| TARGET_EXTENSIONS.contains(&extension))
+            .map(str::to_ascii_lowercase)
+            .is_some_and(|extension| TARGET_EXTENSIONS.contains(&extension.as_str()))
 }

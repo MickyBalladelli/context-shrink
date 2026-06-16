@@ -14,22 +14,6 @@
 - Add formatter tests for XML escaping.
 - Add walker tests for ignored files and supported extensions.
 
-## Language And File Support
-
-- Add more code languages:
-  - `.go`
-  - `.java`
-  - `.cs`
-  - `.swift`
-  - `.kt`
-- Add useful project context files:
-  - `.md`
-  - `.json`
-  - `.yaml`
-  - `.yml`
-  - `.toml`
-- Treat docs and config differently from source code.
-
 ## Install Story
 
 - Support install with:
