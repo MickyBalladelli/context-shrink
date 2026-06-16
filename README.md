@@ -16,11 +16,11 @@ Naming note: the GitHub repository, CLI binary, Codex plugin, and Claude plugin 
 
 ## Examples
 
-Command panel:
+Command:
 
 ![Command panel](images/panel_cmd.png)
 
-Stats panel:
+Output:
 
 ![Stats panel](images/panel_stats.png)
 
