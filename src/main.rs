@@ -7,15 +7,15 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::{Context, Result};
-use clap::{Parser, ValueEnum};
+use anyhow::{bail, Context, Result};
+use clap::{ArgAction, Parser, ValueEnum};
 
 use budget::{count_text_tokens, optimize_budget, ProcessedFile};
 use formatter::{
     format_repository_context_json, format_repository_context_xml, RepositoryMetadata,
 };
 use parser::{compress_file, CompressionLevel};
-use walker::collect_code_files;
+use walker::{collect_code_files, supported_extensions, WalkerOptions};
 
 #[derive(Debug, Parser)]
 #[command(name = "contextshrink")]
@@ -38,6 +38,21 @@ struct Cli {
 
     #[arg(long, value_enum, default_value_t = OutputFormat::Xml)]
     format: OutputFormat,
+
+    #[arg(long, value_name = "GLOB")]
+    include: Vec<String>,
+
+    #[arg(long, value_name = "GLOB")]
+    exclude: Vec<String>,
+
+    #[arg(long = "no-respect-gitignore", action = ArgAction::SetFalse, default_value_t = true)]
+    respect_gitignore: bool,
+
+    #[arg(long)]
+    print_files: bool,
+
+    #[arg(long)]
+    fail_on_empty: bool,
 
     #[arg(long)]
     stats: bool,
@@ -64,7 +79,22 @@ fn main() -> Result<()> {
         .with_context(|| format!("cannot resolve target path {}", cli.path.display()))?;
     let requested_level = CompressionLevel::try_from(cli.level)?;
 
-    let paths = collect_code_files(&root)?;
+    let paths = collect_code_files(
+        &root,
+        &WalkerOptions {
+            include: cli.include.clone(),
+            exclude: cli.exclude.clone(),
+            respect_gitignore: cli.respect_gitignore,
+        },
+    )?;
+    if paths.is_empty() {
+        handle_empty_selection(&cli, &root)?;
+    }
+
+    if cli.print_files {
+        print_selected_files(&root, &paths);
+    }
+
     let mut files = Vec::with_capacity(paths.len());
 
     for path in paths {
@@ -199,6 +229,36 @@ fn output_target(cli: &Cli) -> String {
     match cli.output {
         OutputDestination::Clipboard => "clipboard".to_owned(),
         OutputDestination::File => cli.output_file.display().to_string(),
+    }
+}
+
+fn handle_empty_selection(cli: &Cli, root: &std::path::Path) -> Result<()> {
+    let supported = supported_extensions()
+        .iter()
+        .map(|extension| format!(".{extension}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let message = format!(
+        "no supported files found under {}. Supported extensions: {supported}. Check --include, --exclude, and --no-respect-gitignore.",
+        root.display()
+    );
+
+    if cli.fail_on_empty {
+        bail!("{message}");
+    }
+
+    eprintln!("warning: {message}");
+    Ok(())
+}
+
+fn print_selected_files(root: &std::path::Path, paths: &[PathBuf]) {
+    for path in paths {
+        let relative_path = path
+            .strip_prefix(root)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        println!("{relative_path}");
     }
 }
 

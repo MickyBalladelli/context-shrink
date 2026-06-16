@@ -1,36 +1,46 @@
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use ignore::{DirEntry, WalkBuilder, WalkState};
 
-const TARGET_EXTENSIONS: &[&str] = &[
+pub const TARGET_EXTENSIONS: &[&str] = &[
     "js", "jsx", "ts", "tsx", "py", "rs", "go", "java", "cs", "swift", "kt", "md", "json", "yaml",
     "yml", "toml",
 ];
 
-pub fn collect_code_files(root: &Path) -> Result<Vec<PathBuf>> {
+#[derive(Debug, Clone)]
+pub struct WalkerOptions {
+    pub include: Vec<String>,
+    pub exclude: Vec<String>,
+    pub respect_gitignore: bool,
+}
+
+pub fn collect_code_files(root: &Path, options: &WalkerOptions) -> Result<Vec<PathBuf>> {
     let files = Mutex::new(Vec::new());
+    let filters = Arc::new(PathFilters::new(&options.include, &options.exclude)?);
     let mut builder = WalkBuilder::new(root);
     builder
         .hidden(false)
-        .git_ignore(true)
-        .git_global(true)
-        .git_exclude(true)
-        .parents(true)
+        .git_ignore(options.respect_gitignore)
+        .git_global(options.respect_gitignore)
+        .git_exclude(options.respect_gitignore)
+        .parents(options.respect_gitignore)
         .ignore(true)
         .add_custom_ignore_filename(".cursorignore")
         .threads(0);
 
     builder.build_parallel().run(|| {
         let files = &files;
+        let filters = Arc::clone(&filters);
         Box::new(move |result| {
             let entry = match result {
                 Ok(entry) => entry,
                 Err(_) => return WalkState::Continue,
             };
 
-            if is_target_file(&entry) {
+            if is_target_file(&entry) && filters.matches(root, entry.path()) {
                 if let Some(path) = entry.path().to_str() {
                     if path.contains("/.git/") {
                         return WalkState::Continue;
@@ -51,6 +61,10 @@ pub fn collect_code_files(root: &Path) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
+pub fn supported_extensions() -> &'static [&'static str] {
+    TARGET_EXTENSIONS
+}
+
 fn is_target_file(entry: &DirEntry) -> bool {
     entry
         .file_type()
@@ -61,6 +75,53 @@ fn is_target_file(entry: &DirEntry) -> bool {
             .and_then(|extension| extension.to_str())
             .map(str::to_ascii_lowercase)
             .is_some_and(|extension| TARGET_EXTENSIONS.contains(&extension.as_str()))
+}
+
+struct PathFilters {
+    include: Option<GlobSet>,
+    exclude: Option<GlobSet>,
+}
+
+impl PathFilters {
+    fn new(include: &[String], exclude: &[String]) -> Result<Self> {
+        Ok(Self {
+            include: build_glob_set(include)?,
+            exclude: build_glob_set(exclude)?,
+        })
+    }
+
+    fn matches(&self, root: &Path, path: &Path) -> bool {
+        let relative_path = path.strip_prefix(root).unwrap_or(path);
+
+        if self
+            .exclude
+            .as_ref()
+            .is_some_and(|exclude| exclude.is_match(relative_path))
+        {
+            return false;
+        }
+
+        self.include
+            .as_ref()
+            .map(|include| include.is_match(relative_path))
+            .unwrap_or(true)
+    }
+}
+
+fn build_glob_set(patterns: &[String]) -> Result<Option<GlobSet>> {
+    if patterns.is_empty() {
+        return Ok(None);
+    }
+
+    let mut builder = GlobSetBuilder::new();
+    for pattern in patterns {
+        builder.add(Glob::new(pattern).with_context(|| format!("invalid glob pattern {pattern}"))?);
+    }
+
+    builder
+        .build()
+        .map(Some)
+        .context("cannot build glob filters")
 }
 
 #[cfg(test)]
@@ -86,7 +147,7 @@ mod tests {
         write_file(&root, "Cargo.toml", "");
         write_file(&root, "image.png", "");
 
-        let files = collect_code_files(&root).unwrap();
+        let files = collect_code_files(&root, &default_options()).unwrap();
         let names = relative_names(&root, files);
 
         assert!(names.contains(&"main.rs".to_owned()));
@@ -113,12 +174,56 @@ mod tests {
         write_file(&root, "ignored.rs", "");
         write_file(&root, "cursor_ignored.ts", "");
 
-        let files = collect_code_files(&root).unwrap();
+        let files = collect_code_files(&root, &default_options()).unwrap();
         let names = relative_names(&root, files);
 
         assert!(names.contains(&"visible.rs".to_owned()));
         assert!(!names.contains(&"ignored.rs".to_owned()));
         assert!(!names.contains(&"cursor_ignored.ts".to_owned()));
+    }
+
+    #[test]
+    fn include_and_exclude_filter_selected_files() {
+        let root = temp_dir();
+        fs::create_dir(root.join("src")).unwrap();
+        fs::create_dir(root.join("tests")).unwrap();
+        write_file(&root, "src/main.rs", "");
+        write_file(&root, "src/generated.rs", "");
+        write_file(&root, "tests/main.rs", "");
+
+        let files = collect_code_files(
+            &root,
+            &WalkerOptions {
+                include: vec!["src/**".to_owned()],
+                exclude: vec!["**/generated.rs".to_owned()],
+                respect_gitignore: true,
+            },
+        )
+        .unwrap();
+        let names = relative_names(&root, files);
+
+        assert_eq!(names, vec!["src/main.rs"]);
+    }
+
+    #[test]
+    fn can_disable_gitignore_filtering() {
+        let root = temp_dir();
+        fs::create_dir(root.join(".git")).unwrap();
+        write_file(&root, ".gitignore", "ignored.rs\n");
+        write_file(&root, "ignored.rs", "");
+
+        let files = collect_code_files(
+            &root,
+            &WalkerOptions {
+                include: Vec::new(),
+                exclude: Vec::new(),
+                respect_gitignore: false,
+            },
+        )
+        .unwrap();
+        let names = relative_names(&root, files);
+
+        assert!(names.contains(&"ignored.rs".to_owned()));
     }
 
     fn temp_dir() -> PathBuf {
@@ -145,5 +250,13 @@ mod tests {
                     .replace('\\', "/")
             })
             .collect()
+    }
+
+    fn default_options() -> WalkerOptions {
+        WalkerOptions {
+            include: Vec::new(),
+            exclude: Vec::new(),
+            respect_gitignore: true,
+        }
     }
 }

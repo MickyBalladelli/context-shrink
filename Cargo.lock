@@ -223,6 +223,7 @@ dependencies = [
  "anyhow",
  "arboard",
  "clap",
+ "globset",
  "ignore",
  "tiktoken-rs",
  "tree-sitter",

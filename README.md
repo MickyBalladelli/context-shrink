@@ -78,6 +78,30 @@ Print token savings stats:
 target/release/contextshrink . --max-tokens 12000 --level 2 --output file --output-file /tmp/contextshrink.xml --stats
 ```
 
+Filter selected files with glob patterns:
+
+```sh
+target/release/contextshrink . --include 'src/**' --exclude '**/generated.rs' --output file
+```
+
+Show selected files without changing output format:
+
+```sh
+target/release/contextshrink . --print-files --output file
+```
+
+Fail when no supported files are selected:
+
+```sh
+target/release/contextshrink empty-folder --fail-on-empty
+```
+
+Ignore `.gitignore` rules:
+
+```sh
+target/release/contextshrink . --no-respect-gitignore --output file
+```
+
 ## Levels
 
 `--level 1` keeps full code first, then shrinks files if token budget is too small.
