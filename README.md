@@ -108,6 +108,20 @@ It respects `.gitignore` and `.cursorignore`.
 cargo check
 ```
 
+## Run Tests
+
+Run unit tests:
+
+```sh
+cargo test
+```
+
+Run one test by name:
+
+```sh
+cargo test parser::tests::rust_skeleton_strips_function_body
+```
+
 ## Full Local Test
 
 From repo root:

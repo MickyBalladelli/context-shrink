@@ -94,3 +94,94 @@ fn pick_downgrade_candidate(files: &[ProcessedFile]) -> Option<usize> {
 fn leaf_score(file: &ProcessedFile) -> usize {
     file.path.matches('/').count() * 1000 + file.path.len()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn downgrades_full_to_skeleton_when_over_budget() {
+        let file = processed_file(
+            "src/main.rs",
+            CompressionLevel::Full,
+            "fn main() { let value = \"this full body has enough repeated words to exceed budget\"; println!(\"{value}\"); }",
+            "fn main() { ... }",
+            "fn main()",
+        );
+        let max_tokens = count_text_tokens("fn main() { ... }").unwrap();
+
+        let optimized = optimize_budget(vec![file], max_tokens).unwrap();
+
+        assert_eq!(optimized[0].level, CompressionLevel::Skeleton);
+        assert_eq!(optimized[0].content(), "fn main() { ... }");
+    }
+
+    #[test]
+    fn downgrades_skeleton_to_tree_map_when_over_budget() {
+        let file = processed_file(
+            "src/main.rs",
+            CompressionLevel::Skeleton,
+            "fn main() { println!(\"full body\"); }",
+            "fn main() { let one = 1; let two = 2; let three = 3; }",
+            "fn main()",
+        );
+        let max_tokens = count_text_tokens("fn main()").unwrap();
+
+        let optimized = optimize_budget(vec![file], max_tokens).unwrap();
+
+        assert_eq!(optimized[0].level, CompressionLevel::TreeMap);
+        assert_eq!(optimized[0].content(), "fn main()");
+    }
+
+    #[test]
+    fn downgrade_order_is_stable_for_same_inputs() {
+        let files = vec![
+            processed_file(
+                "src/a.rs",
+                CompressionLevel::Full,
+                "fn a() { let value = \"alpha alpha alpha alpha alpha alpha alpha\"; }",
+                "fn a() { ... }",
+                "fn a()",
+            ),
+            processed_file(
+                "src/b.rs",
+                CompressionLevel::Full,
+                "fn b() { let value = \"beta beta beta beta beta beta beta\"; }",
+                "fn b() { ... }",
+                "fn b()",
+            ),
+        ];
+
+        let first = optimize_budget(files.clone(), 1).unwrap();
+        let second = optimize_budget(files, 1).unwrap();
+
+        assert_eq!(levels(&first), levels(&second));
+        assert_eq!(paths(&first), vec!["src/a.rs", "src/b.rs"]);
+    }
+
+    fn processed_file(
+        path: &str,
+        level: CompressionLevel,
+        full: &str,
+        skeleton: &str,
+        tree_map: &str,
+    ) -> ProcessedFile {
+        ProcessedFile::new(
+            path.to_owned(),
+            level,
+            FileVariants {
+                full: Some(full.to_owned()),
+                skeleton: skeleton.to_owned(),
+                tree_map: tree_map.to_owned(),
+            },
+        )
+    }
+
+    fn levels(files: &[ProcessedFile]) -> Vec<CompressionLevel> {
+        files.iter().map(|file| file.level).collect()
+    }
+
+    fn paths(files: &[ProcessedFile]) -> Vec<&str> {
+        files.iter().map(|file| file.path.as_str()).collect()
+    }
+}

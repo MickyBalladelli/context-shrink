@@ -515,3 +515,114 @@ fn dedupe_preserving_order(lines: Vec<String>) -> Vec<String> {
     }
     deduped
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn rust_skeleton_strips_function_body() {
+        let path = write_temp_source(
+            "rs",
+            r#"
+use std::fmt;
+
+fn greet(name: &str) -> String {
+    format!("hello {name}")
+}
+"#,
+        );
+
+        let variants = compress_file(&path, CompressionLevel::Skeleton).unwrap();
+
+        assert!(variants
+            .skeleton
+            .contains("fn greet(name: &str) -> String { ... }"));
+        assert!(!variants.skeleton.contains("format!"));
+    }
+
+    #[test]
+    fn typescript_skeleton_strips_function_body() {
+        let path = write_temp_source(
+            "ts",
+            r#"
+import { readFile } from 'fs/promises'
+
+export type User = { name: string }
+
+export function greet(user: User): string {
+    return `hello ${user.name}`
+}
+"#,
+        );
+
+        let variants = compress_file(&path, CompressionLevel::Skeleton).unwrap();
+
+        assert!(variants
+            .skeleton
+            .contains("export function greet(user: User): string { ... }"));
+        assert!(variants.skeleton.contains("export type User"));
+        assert!(!variants.skeleton.contains("return `hello"));
+    }
+
+    #[test]
+    fn python_skeleton_strips_function_body() {
+        let path = write_temp_source(
+            "py",
+            r#"
+import os
+
+def greet(name: str) -> str:
+    return f"hello {name}"
+"#,
+        );
+
+        let variants = compress_file(&path, CompressionLevel::Skeleton).unwrap();
+
+        assert!(variants.skeleton.contains("def greet(name: str) -> str:"));
+        assert!(variants.skeleton.contains("..."));
+        assert!(!variants.skeleton.contains("return f"));
+    }
+
+    #[test]
+    fn tree_map_keeps_top_level_shapes() {
+        let path = write_temp_source(
+            "ts",
+            r#"
+import { readFile } from 'fs/promises'
+
+interface User {
+    name: string
+}
+
+class Greeter {
+    greet(user: User): string {
+        return user.name
+    }
+}
+"#,
+        );
+
+        let variants = compress_file(&path, CompressionLevel::TreeMap).unwrap();
+
+        assert!(variants
+            .tree_map
+            .contains("import { readFile } from 'fs/promises'"));
+        assert!(variants.tree_map.contains("interface User"));
+        assert!(variants.tree_map.contains("class Greeter"));
+        assert!(variants.tree_map.contains("greet(user: User): string"));
+        assert!(!variants.tree_map.contains("return user.name"));
+    }
+
+    fn write_temp_source(extension: &str, source: &str) -> std::path::PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = env::temp_dir().join(format!("contextshrink-parser-{unique}.{extension}"));
+        fs::write(&path, source).unwrap();
+        path
+    }
+}

@@ -62,3 +62,88 @@ fn is_target_file(entry: &DirEntry) -> bool {
             .map(str::to_ascii_lowercase)
             .is_some_and(|extension| TARGET_EXTENSIONS.contains(&extension.as_str()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn collects_supported_extensions() {
+        let root = temp_dir();
+        write_file(&root, "main.rs", "");
+        write_file(&root, "server.go", "");
+        write_file(&root, "App.java", "");
+        write_file(&root, "Program.cs", "");
+        write_file(&root, "View.swift", "");
+        write_file(&root, "Service.kt", "");
+        write_file(&root, "README.md", "");
+        write_file(&root, "package.json", "{}");
+        write_file(&root, "config.yaml", "");
+        write_file(&root, "config.yml", "");
+        write_file(&root, "Cargo.toml", "");
+        write_file(&root, "image.png", "");
+
+        let files = collect_code_files(&root).unwrap();
+        let names = relative_names(&root, files);
+
+        assert!(names.contains(&"main.rs".to_owned()));
+        assert!(names.contains(&"server.go".to_owned()));
+        assert!(names.contains(&"App.java".to_owned()));
+        assert!(names.contains(&"Program.cs".to_owned()));
+        assert!(names.contains(&"View.swift".to_owned()));
+        assert!(names.contains(&"Service.kt".to_owned()));
+        assert!(names.contains(&"README.md".to_owned()));
+        assert!(names.contains(&"package.json".to_owned()));
+        assert!(names.contains(&"config.yaml".to_owned()));
+        assert!(names.contains(&"config.yml".to_owned()));
+        assert!(names.contains(&"Cargo.toml".to_owned()));
+        assert!(!names.contains(&"image.png".to_owned()));
+    }
+
+    #[test]
+    fn respects_gitignore_and_cursorignore() {
+        let root = temp_dir();
+        fs::create_dir(root.join(".git")).unwrap();
+        write_file(&root, ".gitignore", "ignored.rs\n");
+        write_file(&root, ".cursorignore", "cursor_ignored.ts\n");
+        write_file(&root, "visible.rs", "");
+        write_file(&root, "ignored.rs", "");
+        write_file(&root, "cursor_ignored.ts", "");
+
+        let files = collect_code_files(&root).unwrap();
+        let names = relative_names(&root, files);
+
+        assert!(names.contains(&"visible.rs".to_owned()));
+        assert!(!names.contains(&"ignored.rs".to_owned()));
+        assert!(!names.contains(&"cursor_ignored.ts".to_owned()));
+    }
+
+    fn temp_dir() -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = env::temp_dir().join(format!("contextshrink-walker-{unique}"));
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    fn write_file(root: &Path, name: &str, contents: &str) {
+        fs::write(root.join(name), contents).unwrap();
+    }
+
+    fn relative_names(root: &Path, files: Vec<PathBuf>) -> Vec<String> {
+        files
+            .into_iter()
+            .map(|path| {
+                path.strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect()
+    }
+}

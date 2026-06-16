@@ -1,19 +1,5 @@
 # TODO
 
-## Tests
-
-- Add parser snapshot tests for:
-  - Rust skeleton output
-  - TypeScript skeleton output
-  - Python skeleton output
-  - tree map output
-- Add budget tests for downgrade behavior:
-  - full to skeleton
-  - skeleton to tree map
-  - stable file ordering
-- Add formatter tests for XML escaping.
-- Add walker tests for ignored files and supported extensions.
-
 ## Install Story
 
 - Support install with:

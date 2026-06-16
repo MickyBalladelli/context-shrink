@@ -30,3 +30,29 @@ fn push_xml_escaped(output: &mut String, value: &str) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::budget::ProcessedFile;
+    use crate::parser::{CompressionLevel, FileVariants};
+
+    #[test]
+    fn escapes_xml_in_paths_and_content() {
+        let files = vec![ProcessedFile::new(
+            "src/<bad>&\"name\".rs".to_owned(),
+            CompressionLevel::Skeleton,
+            FileVariants {
+                full: Some("ignored".to_owned()),
+                skeleton: "if a < b && name == 'x' { \"yes\" }".to_owned(),
+                tree_map: String::new(),
+            },
+        )];
+
+        let xml = format_repository_context(&files);
+
+        assert!(xml.contains("path=\"src/&lt;bad&gt;&amp;&quot;name&quot;.rs\""));
+        assert!(xml.contains("a &lt; b &amp;&amp; name == &apos;x&apos;"));
+        assert!(xml.contains("{ &quot;yes&quot; }"));
+    }
+}
