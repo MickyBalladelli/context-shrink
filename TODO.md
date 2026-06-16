@@ -15,15 +15,6 @@ cargo install --path .
   - Claude Code plugin
   - VS Code extension
 
-## Plugins
-
-- Make Codex and Claude instructions more explicit about when ContextShrink must run.
-- Add expected behavior examples:
-  - ask for whole project summary
-  - see ContextShrink command execute
-  - inspect `/tmp/contextshrink.xml`
-- Add marketplace/install docs for Claude Code if publishing.
-
 ## CLI Quality
 
 - Add `--include` and `--exclude` flags.

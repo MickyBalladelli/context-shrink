@@ -15,3 +15,30 @@ Use in Claude Code:
 ```
 
 The skill writes `/tmp/contextshrink.xml`, then Claude reads it before answering.
+
+Expected behavior:
+
+```text
+Ask: summarize this whole project
+See: ContextShrink command execute
+Inspect: /tmp/contextshrink.xml
+Answer: summary uses compressed repository context
+```
+
+Marketplace install from this repo root:
+
+```sh
+claude plugin marketplace add .
+```
+
+Then install in Claude Code:
+
+```text
+/plugin install contextshrink@context-shrink
+```
+
+Validate before publishing:
+
+```sh
+claude plugin validate .
+```

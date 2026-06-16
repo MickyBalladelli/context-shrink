@@ -228,6 +228,15 @@ Use it:
 Use $contextshrink to compress this repo before answering.
 ```
 
+Expected behavior:
+
+```text
+Ask: summarize this whole project
+See: ContextShrink command execute
+Inspect: /tmp/contextshrink.xml
+Answer: summary uses compressed repository context
+```
+
 The plugin helper tries to build the release binary if it is missing, but building first makes the test clearer.
 
 ## Claude Code Plugin
@@ -278,6 +287,47 @@ Helper command:
 
 ```sh
 claude/contextshrink/bin/contextshrink-claude . 12000 2 /tmp/contextshrink.xml
+```
+
+Expected behavior:
+
+```text
+Ask: summarize this whole project
+See: ContextShrink command execute
+Inspect: /tmp/contextshrink.xml
+Answer: summary uses compressed repository context
+```
+
+### Publish Claude Code Marketplace
+
+This repo includes a Claude Code marketplace file:
+
+```text
+.claude-plugin/marketplace.json
+```
+
+For local testing, add the marketplace from the repo root:
+
+```sh
+claude plugin marketplace add .
+```
+
+Then install the plugin inside Claude Code:
+
+```text
+/plugin install contextshrink@context-shrink
+```
+
+Validate before publishing:
+
+```sh
+claude plugin validate .
+```
+
+For publishing, push this repo to a git host. Users can add it with:
+
+```sh
+claude plugin marketplace add owner/repo
 ```
 
 ## VS Code Extension

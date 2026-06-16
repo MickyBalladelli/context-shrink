@@ -5,7 +5,18 @@ description: Run the local ContextShrink CLI to compress a repository into token
 
 # ContextShrink
 
-Use the local ContextShrink binary to create compact XML repository context before broad codebase reasoning.
+Use the local ContextShrink binary to create compact XML repository context before broad codebase reasoning. For repo-wide prompts, run ContextShrink before inspecting individual files or answering.
+
+## Must Run For
+
+```text
+summarize this project
+explain the architecture
+find likely bugs across the repo
+onboard me to this codebase
+where should I start reading?
+review the whole project
+```
 
 ## Workflow
 
@@ -54,6 +65,15 @@ Focused full-code pass:
 
 ```sh
 scripts/run_contextshrink.sh src 20000 1 /tmp/contextshrink.xml
+```
+
+## Expected Behavior
+
+```text
+User asks: summarize this whole project
+Codex runs: scripts/run_contextshrink.sh . 12000 2 /tmp/contextshrink.xml
+Codex inspects: /tmp/contextshrink.xml
+Codex answers using the compressed repository context.
 ```
 
 ## Notes

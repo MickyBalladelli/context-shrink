@@ -1,0 +1,20 @@
+{
+  "name": "context-shrink",
+  "owner": {
+    "name": "Local developer"
+  },
+  "description": "ContextShrink plugins for Claude Code.",
+  "plugins": [
+    {
+      "name": "contextshrink",
+      "source": "./claude/contextshrink",
+      "description": "Compress local repositories into token-budgeted XML context for Claude Code.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Local developer"
+      },
+      "category": "Productivity",
+      "tags": ["context", "tokens", "code"]
+    }
+  ]
+}
