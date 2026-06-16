@@ -50,3 +50,21 @@ Validate before publishing:
 ```sh
 claude plugin validate .
 ```
+
+Examples:
+
+```sh
+claude/contextshrink/bin/contextshrink-claude src 12000 2 /tmp/contextshrink-src.xml
+claude/contextshrink/bin/contextshrink-claude . 12000 2 /tmp/contextshrink.xml --exclude '**/generated/**'
+claude/contextshrink/bin/contextshrink-claude . 12000 2 /tmp/contextshrink.json --format json
+```
+
+Release checklist:
+
+```text
+cargo test
+cargo build --release
+claude plugin validate .
+claude/contextshrink/bin/contextshrink-claude . 12000 2 /tmp/contextshrink.xml
+bump claude/contextshrink/.claude-plugin/plugin.json version for pinned releases
+```

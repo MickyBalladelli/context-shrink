@@ -22,7 +22,7 @@ review the whole project
 1. Prefer the helper command from the plugin `bin/` directory:
 
 ```sh
-contextshrink-claude <repo-path> <max-tokens> <level> <output-file>
+contextshrink-claude <repo-path> <max-tokens> <level> <output-file> [contextshrink-options...]
 ```
 
 2. Default values when the user does not specify:
@@ -65,6 +65,26 @@ Focused full-code pass:
 ```sh
 contextshrink-claude src 20000 1 /tmp/contextshrink.xml
 ```
+
+Summarize only `src`:
+
+```sh
+contextshrink-claude src 12000 2 /tmp/contextshrink.xml
+```
+
+Exclude generated files:
+
+```sh
+contextshrink-claude . 12000 2 /tmp/contextshrink.xml --exclude '**/generated/**' --exclude '**/*.generated.ts'
+```
+
+JSON output:
+
+```sh
+contextshrink-claude . 12000 2 /tmp/contextshrink.json --format json
+```
+
+When the user mentions a folder or glob, pass it through instead of scanning the whole repo. Prefer the path argument for a single folder and `--include` or `--exclude` for globs.
 
 ## Expected Behavior
 

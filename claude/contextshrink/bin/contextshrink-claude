@@ -5,6 +5,7 @@ repo_path="${1:-.}"
 max_tokens="${2:-12000}"
 level="${3:-2}"
 output_file="${4:-/tmp/contextshrink.xml}"
+shift $(( $# < 4 ? $# : 4 ))
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 project_root="$(cd "$script_dir/../../.." && pwd)"
@@ -30,6 +31,7 @@ fi
   --max-tokens "$max_tokens" \
   --level "$level" \
   --output file \
-  --output-file "$output_file"
+  --output-file "$output_file" \
+  "$@"
 
 printf '%s\n' "$output_file"

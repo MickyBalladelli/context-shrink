@@ -313,6 +313,14 @@ Helper command:
 plugins/contextshrink/skills/contextshrink/scripts/run_contextshrink.sh . 12000 2 /tmp/contextshrink.xml
 ```
 
+Helper examples:
+
+```sh
+plugins/contextshrink/skills/contextshrink/scripts/run_contextshrink.sh src 12000 2 /tmp/contextshrink-src.xml
+plugins/contextshrink/skills/contextshrink/scripts/run_contextshrink.sh . 12000 2 /tmp/contextshrink.xml --exclude '**/generated/**'
+plugins/contextshrink/skills/contextshrink/scripts/run_contextshrink.sh . 12000 2 /tmp/contextshrink.json --format json
+```
+
 ## Install Plugin In Codex
 
 Users install the plugin through the repo marketplace file:
@@ -370,6 +378,16 @@ Answer: summary uses compressed repository context
 
 The plugin helper tries to build the release binary if it is missing, but building first makes the test clearer.
 
+Codex plugin release checklist:
+
+```text
+cargo test
+cargo build --release
+plugins/contextshrink/skills/contextshrink/scripts/run_contextshrink.sh . 12000 2 /tmp/contextshrink.xml
+check .agents/plugins/marketplace.json points to plugins/contextshrink
+bump plugins/contextshrink/.codex-plugin/plugin.json version for pinned releases
+```
+
 ## Claude Code Plugin
 
 This repo includes a Claude Code plugin:
@@ -426,6 +444,14 @@ Helper command:
 claude/contextshrink/bin/contextshrink-claude . 12000 2 /tmp/contextshrink.xml
 ```
 
+Helper examples:
+
+```sh
+claude/contextshrink/bin/contextshrink-claude src 12000 2 /tmp/contextshrink-src.xml
+claude/contextshrink/bin/contextshrink-claude . 12000 2 /tmp/contextshrink.xml --exclude '**/generated/**'
+claude/contextshrink/bin/contextshrink-claude . 12000 2 /tmp/contextshrink.json --format json
+```
+
 Expected behavior:
 
 ```text
@@ -459,6 +485,16 @@ Validate before publishing:
 
 ```sh
 claude plugin validate .
+```
+
+Release checklist:
+
+```text
+cargo test
+cargo build --release
+claude plugin validate .
+scripts/helpers smoke test writes /tmp/contextshrink.xml
+bump plugin versions when publishing a pinned release
 ```
 
 For publishing, push this repo to a git host. Users can add it with:
