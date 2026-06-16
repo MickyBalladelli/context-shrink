@@ -24,6 +24,22 @@ Binary appears here:
 target/release/contextshrink
 ```
 
+## Install
+
+Install the CLI into Cargo's bin directory:
+
+```sh
+cargo install --path .
+```
+
+After install, `contextshrink` should be available on `PATH`:
+
+```sh
+contextshrink . --max-tokens 4000 --level 2 --output file
+```
+
+The Codex plugin, Claude Code plugin, and VS Code extension all prefer the installed `contextshrink` binary when it is available. They check `CONTEXTSHRINK_BIN` first, then `contextshrink` on `PATH`, then repo-local release builds.
+
 ## Run
 
 Scan current directory and write `contextshrink.xml`:
@@ -119,6 +135,34 @@ ContextShrink scans:
 It parses JavaScript, TypeScript, Python, and Rust with tree-sitter. Other code languages use generic declaration extraction. Docs and config files use compact line-based context instead of source-code body stripping.
 
 It respects `.gitignore` and `.cursorignore`.
+
+## Smoke Tests
+
+CLI smoke test:
+
+```sh
+contextshrink . --max-tokens 12000 --level 2 --output file --output-file /tmp/contextshrink-cli.xml --summary
+```
+
+Codex plugin smoke test:
+
+```sh
+plugins/contextshrink/skills/contextshrink/scripts/run_contextshrink.sh . 12000 2 /tmp/contextshrink-codex.xml
+```
+
+Claude Code plugin smoke test:
+
+```sh
+claude/contextshrink/bin/contextshrink-claude . 12000 2 /tmp/contextshrink-claude.xml
+```
+
+VS Code extension smoke test:
+
+```text
+Run Command Palette: ContextShrink: Generate and Ask
+Ask: Using this context, explain what src/main.rs does.
+Expected: the answer uses the generated ContextShrink context.
+```
 
 ## Development Check
 
@@ -220,7 +264,13 @@ The marketplace points to:
 plugins/contextshrink
 ```
 
-Build the CLI first:
+Install or build the CLI first:
+
+```sh
+cargo install --path .
+```
+
+Or build the repo-local release binary:
 
 ```sh
 cargo build --release
@@ -281,7 +331,13 @@ CLAUDE.md
 
 That tells Claude Code to run ContextShrink before repo-wide analysis, including full project summaries.
 
-Build the CLI first:
+Install or build the CLI first:
+
+```sh
+cargo install --path .
+```
+
+Or build the repo-local release binary:
 
 ```sh
 cargo build --release
@@ -383,7 +439,13 @@ That tells Copilot how to treat ContextShrink XML when it sees it.
 
 ### Build VS Code Extension
 
-Build ContextShrink first:
+Install or build ContextShrink first:
+
+```sh
+cargo install --path .
+```
+
+Or build the repo-local release binary:
 
 ```sh
 cargo build --release

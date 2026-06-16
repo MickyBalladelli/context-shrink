@@ -69,7 +69,7 @@
         "contextshrink.binaryPath": {
           "type": "string",
           "default": "",
-          "description": "Optional explicit path to the contextshrink binary."
+          "description": "Optional explicit path to the contextshrink binary. When empty, ContextShrink checks CONTEXTSHRINK_BIN, PATH, then local release builds."
         }
       }
     }

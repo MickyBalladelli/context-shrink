@@ -2,6 +2,14 @@
 
 Claude Code plugin for generating token-budgeted ContextShrink XML before broad repo analysis.
 
+Install the CLI first:
+
+```sh
+cargo install --path .
+```
+
+The helper checks `CONTEXTSHRINK_BIN`, then `contextshrink` on `PATH`, then this repo's release binary.
+
 Test from the repo root:
 
 ```sh

@@ -16,6 +16,14 @@ code --install-extension copilot/contextshrink-vscode/contextshrink-vscode-0.1.0
 
 On some machines, `code` points to Cursor. Use the full VS Code path when you want Visual Studio Code.
 
+Install the CLI first:
+
+```sh
+cargo install --path .
+```
+
+The extension checks `CONTEXTSHRINK_BIN`, then `contextshrink` on `PATH`, then local release builds.
+
 Use Command Palette:
 
 ```text
