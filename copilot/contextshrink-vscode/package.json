@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "publisher": "local",
   "private": true,
+  "icon": "images/context-shrink.png",
   "repository": {
     "type": "git",
     "url": "file:../.."

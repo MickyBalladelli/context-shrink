@@ -1,3 +1,5 @@
+![ContextShrink logo](images/context-shrink.png)
+
 # ContextShrink
 
 ContextShrink is local CLI tool. It walks a repo, parses code with tree-sitter, shrinks source into skeletons or tree maps, counts tokens, then writes XML for LLM context.
@@ -234,13 +236,21 @@ contextshrink-copilot-0.1.0.vsix
 
 ### Install Copilot Extension
 
-From repo root, install with VS Code CLI:
+From repo root, install into VS Code:
+
+```sh
+"/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" --install-extension copilot/contextshrink-vscode/contextshrink-copilot-0.1.0.vsix
+```
+
+Install into Cursor:
 
 ```sh
 code --install-extension copilot/contextshrink-vscode/contextshrink-copilot-0.1.0.vsix
 ```
 
-Or in VS Code:
+On some machines, `code` points to Cursor. Use the full VS Code path above when you want Visual Studio Code.
+
+Or use the app UI:
 
 ```text
 Extensions → ... → Install from VSIX...
