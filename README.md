@@ -281,7 +281,7 @@ bonsai . --incremental-base /path/to/base/repo
 bonsai . --incremental-base /path/to/base.cache
 ```
 
-Include files changed against a git ref:
+Include tracked changes and untracked files against a git ref:
 
 ```sh
 bonsai . --changed-since main

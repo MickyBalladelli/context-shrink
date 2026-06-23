@@ -1,9 +1,5 @@
 # TODO
 
-## Change Workflows
-
-- Add untracked-file support for `--changed-since` branch review workflows.
-
 ## Output Quality
 
 - Improve JSON/YAML/TOML compression to preserve nested important sections better.

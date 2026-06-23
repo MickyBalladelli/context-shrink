@@ -206,6 +206,9 @@ RS
 cat > "$changed_since_repo/src/new.rs" <<'RS'
 pub fn new_file() {}
 RS
+cat > "$changed_since_repo/src/untracked.rs" <<'RS'
+pub fn untracked_file() {}
+RS
 (
   cd "$changed_since_repo"
   git add src/new.rs
@@ -214,12 +217,13 @@ rm "$changed_since_repo/Cargo.toml"
 "$bin" "$changed_since_repo" --changed-since HEAD --incremental-summary --output-file "$tmp_root/changed-since.xml" > "$tmp_root/changed-since.txt"
 grep -Fq 'path="src/lib.rs"' "$tmp_root/changed-since.xml"
 grep -Fq 'path="src/new.rs"' "$tmp_root/changed-since.xml"
+grep -Fq 'path="src/untracked.rs"' "$tmp_root/changed-since.xml"
 if grep -Fq '<entry path="Cargo.toml"' "$tmp_root/changed-since.xml" || grep -Fq '<file path="Cargo.toml"' "$tmp_root/changed-since.xml"; then
   printf 'changed-since included deleted file content\n' >&2
   exit 1
 fi
 grep -Fq '<deleted path="Cargo.toml" />' "$tmp_root/changed-since.xml"
-grep -Fq '  added: 1' "$tmp_root/changed-since.txt"
+grep -Fq '  added: 2' "$tmp_root/changed-since.txt"
 grep -Fq '  changed: 1' "$tmp_root/changed-since.txt"
 grep -Fq '  deleted: 1' "$tmp_root/changed-since.txt"
 

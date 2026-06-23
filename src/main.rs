@@ -109,7 +109,7 @@ struct Cli {
     #[arg(
         long,
         value_name = "GIT_REF",
-        help = "Only include files changed by git diff against this ref"
+        help = "Only include tracked changes and untracked files compared with this git ref"
     )]
     changed_since: Option<String>,
 
@@ -880,7 +880,7 @@ fn load_git_changes(cli: &Cli, root: &Path) -> Result<Option<GitChanges>> {
         return Ok(None);
     };
 
-    let output = ProcessCommand::new("git")
+    let diff_output = ProcessCommand::new("git")
         .arg("-C")
         .arg(root)
         .arg("diff")
@@ -892,15 +892,38 @@ fn load_git_changes(cli: &Cli, root: &Path) -> Result<Option<GitChanges>> {
         .output()
         .with_context(|| format!("cannot run git diff against {git_ref}"))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
+    if !diff_output.status.success() {
+        let stderr = String::from_utf8_lossy(&diff_output.stderr);
         bail!("git diff against {git_ref} failed: {}", stderr.trim());
     }
 
-    parse_git_changes(&output.stdout, root, cli)
+    let mut changes = parse_git_diff_changes(&diff_output.stdout, root, cli)?;
+
+    let mut command = ProcessCommand::new("git");
+    command
+        .arg("-C")
+        .arg(root)
+        .arg("ls-files")
+        .arg("--others")
+        .arg("-z");
+    if cli.respect_gitignore {
+        command.arg("--exclude-standard");
+    }
+    command.arg("--");
+
+    let untracked_output = command
+        .output()
+        .context("cannot list untracked git files")?;
+    if !untracked_output.status.success() {
+        let stderr = String::from_utf8_lossy(&untracked_output.stderr);
+        bail!("cannot list untracked git files: {}", stderr.trim());
+    }
+
+    add_untracked_git_changes(&mut changes, &untracked_output.stdout, root, cli)?;
+    Ok(Some(changes))
 }
 
-fn parse_git_changes(bytes: &[u8], root: &Path, cli: &Cli) -> Result<Option<GitChanges>> {
+fn parse_git_diff_changes(bytes: &[u8], root: &Path, cli: &Cli) -> Result<GitChanges> {
     let fields = bytes
         .split(|byte| *byte == 0)
         .filter(|field| !field.is_empty())
@@ -951,7 +974,26 @@ fn parse_git_changes(bytes: &[u8], root: &Path, cli: &Cli) -> Result<Option<GitC
 
     changes.deleted.sort();
     changes.deleted.dedup();
-    Ok(Some(changes))
+    Ok(changes)
+}
+
+fn add_untracked_git_changes(
+    changes: &mut GitChanges,
+    bytes: &[u8],
+    root: &Path,
+    cli: &Cli,
+) -> Result<()> {
+    for field in bytes
+        .split(|byte| *byte == 0)
+        .filter(|field| !field.is_empty())
+    {
+        let path = normalize_relative_path(&String::from_utf8_lossy(field));
+        if git_path_allowed(root, &path, cli)? {
+            changes.changed.insert(path, FileDelta::Added);
+        }
+    }
+
+    Ok(())
 }
 
 fn normalize_relative_path(path: &str) -> String {
