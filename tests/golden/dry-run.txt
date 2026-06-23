@@ -1,0 +1,8 @@
+dry_run:
+  files: 2
+  deleted: 0
+  estimated_tokens: ESTIMATED
+  max_tokens: 12000
+selected_files:
+  Cargo.toml  L2  17 tokens
+  src/lib.rs  L2  13 tokens

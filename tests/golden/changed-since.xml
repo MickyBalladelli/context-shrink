@@ -1,0 +1,21 @@
+<repository_context>
+<metadata generated_at="TIMESTAMP" repo_root="/REPO" max_tokens="4000" compression_level="2" file_count="3" />
+<project_map>
+<entry path="src/lib.rs" level="2" tokens="21" />
+<entry path="src/new.rs" level="2" tokens="8" />
+<entry path="src/untracked.rs" level="2" tokens="9" />
+</project_map>
+<deleted_files>
+<deleted path="Cargo.toml" />
+</deleted_files>
+<files>
+<file path="src/lib.rs" level="2" tokens="21">pub fn greet(name: &amp;str) -&gt; String { ... }
+
+pub fn branch_change() { ... }
+</file>
+<file path="src/new.rs" level="2" tokens="8">pub fn new_file() { ... }
+</file>
+<file path="src/untracked.rs" level="2" tokens="9">pub fn untracked_file() { ... }
+</file>
+</files>
+</repository_context>

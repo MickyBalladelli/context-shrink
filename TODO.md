@@ -12,4 +12,3 @@
 ## Testing And Release
 
 - Move release binary incremental smoke into a shared test script used by release workflow.
-- Add golden tests for `--dry-run`, `--quiet`, `--changed-since`, `--file-hashes`, and completions.

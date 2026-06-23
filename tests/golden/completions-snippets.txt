@@ -1,0 +1,12 @@
+[bash]
+            bonsai,init-agent)
+            bonsai,completions)
+            opts="-h --tokenizer --json --help [PATH]"
+[zsh]
+'--changed-since=[Only include tracked changes and untracked files compared with this git ref]:GIT_REF:_default' \
+'--json[]' \
+'completions:Generate shell completions' \
+[fish]
+complete -c bonsai -n "__fish_bonsai_needs_command" -l changed-since -d 'Only include tracked changes and untracked files compared with this git ref' -r
+complete -c bonsai -n "__fish_bonsai_using_subcommand doctor" -l json
+complete -c bonsai -n "__fish_bonsai_needs_command" -a "completions" -d 'Generate shell completions'

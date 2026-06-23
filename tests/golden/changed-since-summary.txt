@@ -1,0 +1,6 @@
+incremental_summary:
+  added: 2
+  changed: 1
+  unchanged: 0
+  skipped: 0
+  deleted: 1

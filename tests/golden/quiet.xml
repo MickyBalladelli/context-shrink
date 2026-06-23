@@ -1,0 +1,14 @@
+<repository_context>
+<metadata generated_at="TIMESTAMP" repo_root="/REPO" max_tokens="12000" compression_level="2" file_count="2" />
+<project_map>
+<entry path="Cargo.toml" level="2" tokens="17" />
+<entry path="src/lib.rs" level="2" tokens="13" />
+</project_map>
+<files>
+<file path="Cargo.toml" level="2" tokens="17">[package]
+name = &quot;demo&quot;
+version = &quot;0.1.0&quot;</file>
+<file path="src/lib.rs" level="2" tokens="13">pub fn greet(name: &amp;str) -&gt; String { ... }
+</file>
+</files>
+</repository_context>

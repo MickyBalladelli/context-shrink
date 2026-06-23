@@ -22,6 +22,25 @@ normalize_json() {
   sed -E 's/"generated_at":"[0-9]+"/"generated_at":"TIMESTAMP"/; s#"repo_root":"[^"]+"#"repo_root":"/REPO"#' "$1"
 }
 
+completion_snippets() {
+  local bash_file="$1"
+  local zsh_file="$2"
+  local fish_file="$3"
+
+  printf '[bash]\n'
+  grep -F '            bonsai,init-agent)' "$bash_file"
+  grep -F '            bonsai,completions)' "$bash_file"
+  grep -F '            opts="-h --tokenizer --json --help [PATH]"' "$bash_file"
+  printf '[zsh]\n'
+  grep -F -- "'--changed-since=[Only include tracked changes and untracked files compared with this git ref]:GIT_REF:_default' \\" "$zsh_file"
+  grep -F -- "'--json[]' \\" "$zsh_file"
+  grep -F -- "'completions:Generate shell completions' \\" "$zsh_file" | head -n 1
+  printf '[fish]\n'
+  grep -F 'complete -c bonsai -n "__fish_bonsai_needs_command" -l changed-since -d '"'"'Only include tracked changes and untracked files compared with this git ref'"'"' -r' "$fish_file"
+  grep -F 'complete -c bonsai -n "__fish_bonsai_using_subcommand doctor" -l json' "$fish_file"
+  grep -F 'complete -c bonsai -n "__fish_bonsai_needs_command" -a "completions" -d '"'"'Generate shell completions'"'"'' "$fish_file"
+}
+
 make_golden_repo() {
   local repo="$1"
   mkdir -p "$repo/src"
@@ -67,6 +86,31 @@ diff -u "$repo_root/tests/golden/context.xml" "$tmp_root/context.normalized.xml"
 "$bin" "$golden_repo" --max-tokens 12000 --level 2 --format json --output-file "$tmp_root/context.json"
 normalize_json "$tmp_root/context.json" > "$tmp_root/context.normalized.json"
 diff -u "$repo_root/tests/golden/context.json" "$tmp_root/context.normalized.json"
+
+"$bin" "$golden_repo" --dry-run --max-tokens 12000 --level 2 --output-file "$tmp_root/dry-run.xml" > "$tmp_root/dry-run.txt"
+sed -E 's/estimated_tokens: [0-9]+/estimated_tokens: ESTIMATED/' "$tmp_root/dry-run.txt" > "$tmp_root/dry-run.normalized.txt"
+diff -u "$repo_root/tests/golden/dry-run.txt" "$tmp_root/dry-run.normalized.txt"
+if test -e "$tmp_root/dry-run.xml"; then
+  printf 'dry-run wrote output file\n' >&2
+  exit 1
+fi
+
+"$bin" "$golden_repo" --quiet --max-tokens 12000 --level 2 --output-file "$tmp_root/quiet.xml" > "$tmp_root/quiet.txt"
+if test -s "$tmp_root/quiet.txt"; then
+  printf 'quiet wrote stdout\n' >&2
+  exit 1
+fi
+normalize_xml "$tmp_root/quiet.xml" > "$tmp_root/quiet.normalized.xml"
+diff -u "$repo_root/tests/golden/quiet.xml" "$tmp_root/quiet.normalized.xml"
+
+"$bin" "$golden_repo" --file-hashes --project-map-only --max-tokens 12000 --level 2 --output-file "$tmp_root/file-hashes.xml"
+diff -u "$repo_root/tests/golden/file-hashes.xml" "$tmp_root/file-hashes.xml"
+
+"$bin" completions bash > "$tmp_root/completions.bash"
+"$bin" completions zsh > "$tmp_root/completions.zsh"
+"$bin" completions fish > "$tmp_root/completions.fish"
+completion_snippets "$tmp_root/completions.bash" "$tmp_root/completions.zsh" "$tmp_root/completions.fish" > "$tmp_root/completions-snippets.txt"
+diff -u "$repo_root/tests/golden/completions-snippets.txt" "$tmp_root/completions-snippets.txt"
 
 flag_repo="$tmp_root/flag-repo"
 make_flag_repo "$flag_repo"
@@ -215,17 +259,9 @@ RS
 )
 rm "$changed_since_repo/Cargo.toml"
 "$bin" "$changed_since_repo" --changed-since HEAD --incremental-summary --output-file "$tmp_root/changed-since.xml" > "$tmp_root/changed-since.txt"
-grep -Fq 'path="src/lib.rs"' "$tmp_root/changed-since.xml"
-grep -Fq 'path="src/new.rs"' "$tmp_root/changed-since.xml"
-grep -Fq 'path="src/untracked.rs"' "$tmp_root/changed-since.xml"
-if grep -Fq '<entry path="Cargo.toml"' "$tmp_root/changed-since.xml" || grep -Fq '<file path="Cargo.toml"' "$tmp_root/changed-since.xml"; then
-  printf 'changed-since included deleted file content\n' >&2
-  exit 1
-fi
-grep -Fq '<deleted path="Cargo.toml" />' "$tmp_root/changed-since.xml"
-grep -Fq '  added: 2' "$tmp_root/changed-since.txt"
-grep -Fq '  changed: 1' "$tmp_root/changed-since.txt"
-grep -Fq '  deleted: 1' "$tmp_root/changed-since.txt"
+normalize_xml "$tmp_root/changed-since.xml" > "$tmp_root/changed-since.normalized.xml"
+diff -u "$repo_root/tests/golden/changed-since.xml" "$tmp_root/changed-since.normalized.xml"
+diff -u "$repo_root/tests/golden/changed-since-summary.txt" "$tmp_root/changed-since.txt"
 
 empty_repo="$tmp_root/empty-repo"
 mkdir -p "$empty_repo"
