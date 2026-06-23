@@ -20,7 +20,7 @@ use budget::{
     count_text_tokens, downgrade_largest_file, file_priority_score, optimize_budget, ProcessedFile,
     TokenCounter, TokenizerKind,
 };
-use cache::{cache_path_for_root, CacheMetadata, CacheStatus, ParseCache};
+use cache::{cache_path_for_root, CacheDiagnostics, CacheMetadata, CacheStatus, ParseCache};
 use formatter::{
     format_repository_context_json, format_repository_context_xml, DirectorySummary, FormatOptions,
     RepositoryMetadata,
@@ -569,6 +569,7 @@ fn print_doctor(target: &Path, tokenizer: TokenizerKind) -> Result<()> {
     println!("  version: {}", env!("CARGO_PKG_VERSION"));
     println!("  repo_root: {}", root.display());
     println!("  cache_path: {}", cache_path.display());
+    print_cache_diagnostics(&cache_path, &ParseCache::load(cache_path.clone()));
     println!("  tokenizer: {} ({tokenizer_status})", tokenizer.as_str());
     println!("  parsers:");
 
@@ -583,6 +584,53 @@ fn print_doctor(target: &Path, tokenizer: TokenizerKind) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn print_cache_diagnostics(cache_path: &Path, cache: &ParseCache) {
+    let diagnostics = cache.diagnostics();
+    let size_bytes = fs::metadata(cache_path)
+        .map(|metadata| metadata.len())
+        .unwrap_or(0);
+
+    println!("  cache:");
+    println!("    size_bytes: {size_bytes}");
+    println!("    entries: {}", diagnostics.entry_count);
+    println!("    stale_entries: {}", diagnostics.stale_entry_count);
+    print_cache_metadata(&diagnostics);
+}
+
+fn print_cache_metadata(diagnostics: &CacheDiagnostics) {
+    println!("    metadata:");
+    let Some(metadata) = &diagnostics.metadata else {
+        println!("      present: false");
+        return;
+    };
+
+    println!("      present: true");
+    println!("      respect_gitignore: {}", metadata.respect_gitignore);
+    println!(
+        "      max_file_bytes: {}",
+        metadata
+            .max_file_bytes
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "none".to_owned())
+    );
+    println!(
+        "      include: {}",
+        if metadata.include.is_empty() {
+            "[]".to_owned()
+        } else {
+            metadata.include.join(", ")
+        }
+    );
+    println!(
+        "      exclude: {}",
+        if metadata.exclude.is_empty() {
+            "[]".to_owned()
+        } else {
+            metadata.exclude.join(", ")
+        }
+    );
 }
 
 fn cache_command_target(args: &[String]) -> Result<PathBuf> {

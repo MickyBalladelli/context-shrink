@@ -456,6 +456,8 @@ Check parser and tokenizer health:
 bonsai doctor
 ```
 
+It also reports the cache path, cache size, cache entry count, stored selection metadata, and stale entries.
+
 ## Development
 
 Check:

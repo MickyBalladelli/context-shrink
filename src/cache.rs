@@ -27,6 +27,13 @@ pub struct CacheMetadata {
     pub max_file_bytes: Option<u64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CacheDiagnostics {
+    pub entry_count: usize,
+    pub stale_entry_count: usize,
+    pub metadata: Option<CacheMetadata>,
+}
+
 #[derive(Debug, Clone)]
 struct CacheEntry {
     size: u64,
@@ -134,6 +141,27 @@ impl ParseCache {
 
     pub fn metadata_matches(&self, metadata: &CacheMetadata) -> bool {
         self.metadata.as_ref() == Some(metadata)
+    }
+
+    pub fn diagnostics(&self) -> CacheDiagnostics {
+        let stale_entry_count = self
+            .entries
+            .iter()
+            .filter(|(path, entry)| {
+                let Ok(metadata) = fs::metadata(path) else {
+                    return true;
+                };
+                !metadata.is_file()
+                    || entry.size != metadata.len()
+                    || entry.modified_ns != modified_ns(&metadata)
+            })
+            .count();
+
+        CacheDiagnostics {
+            entry_count: self.entries.len(),
+            stale_entry_count,
+            metadata: self.metadata.clone(),
+        }
     }
 
     pub fn set_metadata(&mut self, metadata: CacheMetadata) {
@@ -444,5 +472,44 @@ mod tests {
         assert_eq!(entry.variants.full.as_deref(), Some("fn main() {}\n"));
         assert_eq!(entry.variants.skeleton, "fn main() { ... }\n");
         assert_eq!(entry.variants.tree_map, "fn main()\n");
+    }
+
+    #[test]
+    fn diagnostics_counts_stale_entries() {
+        let root = std::env::temp_dir().join(format!(
+            "bonsai-cache-diagnostics-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let source = root.join("lib.rs");
+        let cache_path = root.join("cache.bin");
+        fs::write(&source, "fn main() {}\n").unwrap();
+
+        let metadata = fs::metadata(&source).unwrap();
+        let mut cache = ParseCache::load(cache_path.clone());
+        cache.put(
+            &source,
+            &metadata,
+            FileVariants {
+                full: Some("fn main() {}\n".to_owned()),
+                skeleton: "fn main() { ... }\n".to_owned(),
+                tree_map: "fn main()\n".to_owned(),
+            },
+        );
+        cache.save().unwrap();
+
+        let cache = ParseCache::load(cache_path.clone());
+        assert_eq!(cache.diagnostics().entry_count, 1);
+        assert_eq!(cache.diagnostics().stale_entry_count, 0);
+
+        fs::write(&source, "fn changed() {}\n").unwrap();
+        let cache = ParseCache::load(cache_path);
+        assert_eq!(cache.diagnostics().stale_entry_count, 1);
+
+        fs::remove_dir_all(root).unwrap();
     }
 }

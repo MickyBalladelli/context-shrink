@@ -4,7 +4,6 @@
 
 - Convert `doctor`, `cache`, `init-agent`, and `completions` to real Clap subcommands.
 - Add `bonsai doctor --json` for scripts and CI.
-- Add cache diagnostics to `bonsai doctor`: cache size, entry count, metadata, stale entries.
 
 ## Change Workflows
 
