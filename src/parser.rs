@@ -59,7 +59,7 @@ pub fn compress_file(path: &Path, _requested_level: CompressionLevel) -> Result<
             )
         }
         None => match syntax {
-            SyntaxKind::Text | SyntaxKind::ObjectiveC => (
+            SyntaxKind::Text | SyntaxKind::WebText => (
                 compact_text_context(path, &source),
                 build_text_tree_map(path, &source),
             ),
@@ -94,6 +94,7 @@ enum SyntaxKind {
     C,
     Cpp,
     ObjectiveC,
+    WebText,
     Text,
 }
 
@@ -112,6 +113,7 @@ impl SyntaxKind {
             Some("c" | "h") => Ok(Self::C),
             Some("cpp" | "hpp") => Ok(Self::Cpp),
             Some("m" | "mm") => Ok(Self::ObjectiveC),
+            Some("vue" | "svelte" | "astro" | "html") => Ok(Self::WebText),
             Some("md" | "json" | "yaml" | "yml" | "toml") => Ok(Self::Text),
             Some(other) => bail!("unsupported extension: {other}"),
             None => bail!("file has no extension: {}", path.display()),
@@ -132,6 +134,7 @@ impl SyntaxKind {
             Self::C => Some(tree_sitter_c::language()),
             Self::Cpp => Some(tree_sitter_cpp::language()),
             Self::ObjectiveC => Some(objective_c_language()),
+            Self::WebText => None,
             Self::Text => None,
         }
     }
@@ -231,7 +234,7 @@ fn body_replacement(node: Node, syntax: SyntaxKind) -> Option<Replacement> {
                 None
             }
         }
-        SyntaxKind::Text => None,
+        SyntaxKind::WebText | SyntaxKind::Text => None,
     }
 }
 
@@ -464,7 +467,7 @@ fn should_emit_tree_map_node(node: Node, syntax: SyntaxKind) -> bool {
                 | "method_declaration"
                 | "method_definition"
         ),
-        SyntaxKind::Text => false,
+        SyntaxKind::WebText | SyntaxKind::Text => false,
     }
 }
 
@@ -472,6 +475,7 @@ fn compact_text_context(path: &Path, source: &str) -> String {
     match extension(path).as_deref() {
         Some("md") => compact_markdown_context(source),
         Some("json" | "yaml" | "yml" | "toml") => compact_config_lines(source, 180),
+        Some("vue" | "svelte" | "astro" | "html") => compact_web_context(source, 160),
         _ => compact_non_empty_lines(source, 160),
     }
 }
@@ -494,8 +498,21 @@ fn build_text_tree_map(path: &Path, source: &str) -> String {
             }
         }
         Some("json" | "yaml" | "yml" | "toml") => compact_config_lines(source, 100),
+        Some("vue" | "svelte" | "astro" | "html") => compact_web_context(source, 80),
         _ => compact_non_empty_lines(source, 80),
     }
+}
+
+fn compact_web_context(source: &str, max_lines: usize) -> String {
+    source
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .filter(|line| !line.starts_with("<!--") && !line.starts_with("//"))
+        .map(|line| truncate_line(line.to_owned(), 240))
+        .take(max_lines)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn compact_markdown_context(source: &str) -> String {
@@ -1008,6 +1025,85 @@ public:
                 body_text.is_empty() || !variants.skeleton.contains(body_text),
                 "body kept for {extension}: {}",
                 variants.skeleton
+            );
+        }
+    }
+
+    #[test]
+    fn web_templates_keep_compact_shape() {
+        let cases = [
+            (
+                "vue",
+                r#"
+<script setup lang="ts">
+const title = 'Hello'
+</script>
+
+<template>
+  <main class="page">
+    <h1>{{ title }}</h1>
+  </main>
+</template>
+"#,
+                "<script setup lang=\"ts\">",
+                "<h1>{{ title }}</h1>",
+            ),
+            (
+                "svelte",
+                r#"
+<script lang="ts">
+  export let title: string
+</script>
+
+<main>
+  <h1>{title}</h1>
+</main>
+"#,
+                "<script lang=\"ts\">",
+                "<h1>{title}</h1>",
+            ),
+            (
+                "astro",
+                r#"
+---
+const title = 'Hello'
+---
+
+<html>
+  <body><h1>{title}</h1></body>
+</html>
+"#,
+                "const title = 'Hello'",
+                "<body><h1>{title}</h1></body>",
+            ),
+            (
+                "html",
+                r#"
+<!doctype html>
+<html>
+  <body>
+    <h1>Hello</h1>
+  </body>
+</html>
+"#,
+                "<!doctype html>",
+                "<h1>Hello</h1>",
+            ),
+        ];
+
+        for (extension, source, first_shape, second_shape) in cases {
+            let path = write_temp_source(extension, source);
+            let variants = compress_file(&path, CompressionLevel::TreeMap).unwrap();
+
+            assert!(
+                variants.tree_map.contains(first_shape),
+                "missing first shape for {extension}: {}",
+                variants.tree_map
+            );
+            assert!(
+                variants.tree_map.contains(second_shape),
+                "missing second shape for {extension}: {}",
+                variants.tree_map
             );
         }
     }

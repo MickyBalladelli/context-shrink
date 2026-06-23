@@ -7,7 +7,7 @@ use ignore::{DirEntry, WalkBuilder, WalkState};
 
 pub const TARGET_EXTENSIONS: &[&str] = &[
     "js", "jsx", "ts", "tsx", "py", "rs", "go", "java", "cs", "swift", "kt", "c", "h", "cpp",
-    "hpp", "m", "mm", "md", "json", "yaml", "yml", "toml",
+    "hpp", "m", "mm", "vue", "svelte", "astro", "html", "md", "json", "yaml", "yml", "toml",
 ];
 
 #[derive(Debug, Clone)]
@@ -173,6 +173,10 @@ mod tests {
         write_file(&root, "main.hpp", "");
         write_file(&root, "View.m", "");
         write_file(&root, "View.mm", "");
+        write_file(&root, "App.vue", "");
+        write_file(&root, "App.svelte", "");
+        write_file(&root, "Page.astro", "");
+        write_file(&root, "index.html", "");
         write_file(&root, "README.md", "");
         write_file(&root, "package.json", "{}");
         write_file(&root, "config.yaml", "");
@@ -195,6 +199,10 @@ mod tests {
         assert!(names.contains(&"main.hpp".to_owned()));
         assert!(names.contains(&"View.m".to_owned()));
         assert!(names.contains(&"View.mm".to_owned()));
+        assert!(names.contains(&"App.vue".to_owned()));
+        assert!(names.contains(&"App.svelte".to_owned()));
+        assert!(names.contains(&"Page.astro".to_owned()));
+        assert!(names.contains(&"index.html".to_owned()));
         assert!(names.contains(&"README.md".to_owned()));
         assert!(names.contains(&"package.json".to_owned()));
         assert!(names.contains(&"config.yaml".to_owned()));
