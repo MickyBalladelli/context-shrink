@@ -1,32 +1,24 @@
 <p align="center">
-    <img src="images/bonsai.png" alt="Bonsai logo" width="160" />
+  <img src="images/bonsai.png" alt="Bonsai logo" width="160" />
 </p>
 
 <p align="center">
-    <a href="./LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg" /></a>
-    <img alt="Language: Rust" src="https://img.shields.io/badge/Language-Rust-orange.svg" />
-    <img alt="Version" src="https://img.shields.io/badge/Version-0.3.2-lightgrey.svg" />
+  <a href="./LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg" /></a>
+  <img alt="Language: Rust" src="https://img.shields.io/badge/Language-Rust-orange.svg" />
+  <img alt="Version" src="https://img.shields.io/badge/Version-0.3.2-lightgrey.svg" />
 </p>
 
 # Bonsai
 
-  On this repository Bonsai reduced ~76,911 raw tokens to 13,450 shrunk tokens (~82.5% savings) using AST skeletonization — keep your LLM contexts small, accurate, and cheap.
+Bonsai turns a local repository into a small, repeatable context file for LLMs.
 
-Naming note: the GitHub repository, CLI binary, Codex plugin, and Claude plugin are `bonsai`; the VS Code package is `bonsai-vscode`.
+It scans source files, compresses code with syntax-aware summaries, respects your token budget, and writes XML or JSON you can paste into ChatGPT, Codex, Claude, Copilot, or another agent.
 
-## Examples
-
-Command:
-
-![Command panel](images/panel_cmd.png)
-
-Output:
-
-![Stats panel](images/panel_stats.png)
+Use it when you want an LLM to understand a whole project before asking for architecture, onboarding, review, or branch-change help.
 
 ## Quick Start
 
-Run inside a repo:
+Install Bonsai, then run it inside a repository:
 
 ```sh
 bonsai .
@@ -38,13 +30,54 @@ This writes:
 bonsai.xml
 ```
 
-Copy it into your LLM and ask:
+Paste that file into an LLM and ask:
 
 ```text
-Use this Bonsai XML as repo context. Summarize the architecture and tell me where to start reading.
+Use this Bonsai repo context. Explain the architecture and tell me where to start reading.
 ```
 
-Need the binary? Download a release. No Rust needed.
+For a larger context budget:
+
+```sh
+bonsai . --max-tokens 12000 --level 2 --output-file /tmp/bonsai.xml
+```
+
+For a paste-ready prompt:
+
+```sh
+bonsai . --prompt --output-file /tmp/bonsai-prompt.txt
+```
+
+## Quick Setup For Agents
+
+Run this once in any repo where you want agents to use Bonsai first:
+
+```sh
+bonsai init-agent
+```
+
+It writes:
+
+```text
+AGENTS.md
+CLAUDE.md
+```
+
+Those files tell Codex, Claude Code, and similar agents to run Bonsai before answering broad project questions.
+
+Overwrite existing files:
+
+```sh
+bonsai init-agent --force
+```
+
+## Install
+
+Download a release binary:
+
+```text
+https://github.com/MickyBalladelli/bonsai/releases/latest
+```
 
 macOS Apple Silicon:
 
@@ -62,127 +95,64 @@ chmod +x bonsai
 sudo mv bonsai /usr/local/bin/bonsai
 ```
 
-Or install from source:
+Install from this checkout:
 
 ```sh
 cargo install --path .
 ```
 
-Install straight from GitHub:
+Install from GitHub:
 
 ```sh
 cargo install --git https://github.com/MickyBalladelli/bonsai.git
 ```
 
-## What It Is Good For
+Check your install:
 
-Use Bonsai when you want broad repo context that is visible and repeatable:
+```sh
+bonsai doctor
+```
+
+## What Bonsai Keeps
+
+Bonsai has three compression levels:
 
 ```text
-Summarize this project.
-Explain the architecture.
-Find likely entry points.
-Prepare context before asking another LLM.
-Compare token savings before sending repo context.
+--level 1  Full code first, then shrink if needed
+--level 2  Imports, signatures, types, classes, and function shapes
+--level 3  Compact tree map only
 ```
 
-It is less useful when the agent already has the exact file or function you want edited.
+Example source:
 
-## Install
+```rust
+fn greet(name: &str) -> String {
+    let message = format!("hello {name}");
+    println!("{message}");
+    message
+}
+```
 
-Release binaries:
+Level 2 skeleton:
+
+```rust
+fn greet(name: &str) -> String { ... }
+```
+
+Level 3 tree map:
 
 ```text
-bonsai-macos-arm64
-bonsai-linux-x64
+fn greet(name: &str) -> String
 ```
 
-Download from:
+Markdown keeps headings, useful summary text, tables, links, and code fence language names. Config files keep important top-level shape and supported top-level comments.
 
-```text
-https://github.com/MickyBalladelli/bonsai/releases/latest
-```
+## Common Commands
 
-From this repo:
+Write XML to `bonsai.xml`:
 
 ```sh
-cargo install --path .
-```
-
-From git:
-
-```sh
-cargo install --git https://github.com/MickyBalladelli/bonsai.git
-```
-
-Or build a local binary:
-
-```sh
-cargo build --release
-target/release/bonsai .
-```
-
-Tagged releases publish:
-
-```text
-bonsai-linux-x64
-bonsai-macos-arm64
-bonsai-linux-x64.sha256
-bonsai-macos-arm64.sha256
-bonsai-vscode-*.vsix
-```
-
-The Codex plugin, Claude Code plugin, and VS Code extension find the binary in this order:
-
-```text
-BONSAI_BIN
-bonsai on PATH
-repo-local target/release/bonsai
-```
-
-## Advanced Commands
-
-Paste-ready clipboard prompt:
-
-```sh
-bonsai . --prompt --output clipboard
-```
-
-Custom paste-ready prompt:
-
-```sh
-bonsai . --ask-template "Use this repo context to find likely bugs." --output clipboard
-```
-
-Architecture map:
-
-```sh
-bonsai . --level 3
-```
-
-Detailed repo context:
-
-```sh
-bonsai . --max-tokens 12000 --level 2
-```
-
-Use a model-family tokenizer:
-
-```sh
-bonsai . --tokenizer o200k_base
-bonsai . --tokenizer gpt-4o
-```
-
-Only scan `src`:
-
-```sh
-bonsai src
-```
-
-Write somewhere else:
-
-```sh
-bonsai . --output-file /tmp/bonsai.xml
+bonsai .
 ```
 
 Write JSON:
@@ -191,10 +161,41 @@ Write JSON:
 bonsai . --format json --output-file /tmp/bonsai.json
 ```
 
-Write a paste-ready prompt file:
+Copy a prompt to the clipboard:
 
 ```sh
-bonsai . --prompt --output-file /tmp/bonsai-prompt.txt
+bonsai . --prompt --output clipboard
+```
+
+Use a model-family tokenizer:
+
+```sh
+bonsai . --tokenizer gpt-4o
+bonsai . --tokenizer o200k_base
+```
+
+Make a compact architecture map:
+
+```sh
+bonsai . --level 3
+```
+
+Write only the project map:
+
+```sh
+bonsai . --project-map-only
+```
+
+Include stable file hashes in the project map:
+
+```sh
+bonsai . --file-hashes
+```
+
+Write metadata and project map without file bodies:
+
+```sh
+bonsai . --no-content
 ```
 
 Show selected files:
@@ -203,34 +204,10 @@ Show selected files:
 bonsai . --print-files
 ```
 
-Show install health:
+Filter files:
 
 ```sh
-bonsai doctor
-```
-
-Only write the project map:
-
-```sh
-bonsai . --project-map-only
-```
-
-Include file hashes in the project map:
-
-```sh
-bonsai . --file-hashes
-```
-
-Include files changed against a git ref:
-
-```sh
-bonsai . --changed-since main
-```
-
-Write metadata and project map without file bodies:
-
-```sh
-bonsai . --no-content
+bonsai . --include 'src/**' --exclude '**/generated.rs'
 ```
 
 Sort output:
@@ -241,17 +218,19 @@ bonsai . --sort tokens
 bonsai . --sort path
 ```
 
-Add per-directory token summaries:
+Add directory token summaries:
 
 ```sh
 bonsai . --directory-summaries
 ```
 
-Fail when output is still over budget after maximum compression:
+Fail if output cannot fit after maximum compression:
 
 ```sh
 bonsai . --max-tokens 12000 --fail-over-budget
 ```
+
+## Change-Focused Context
 
 Only include files changed since the last cached local run:
 
@@ -259,79 +238,78 @@ Only include files changed since the last cached local run:
 bonsai . --incremental
 ```
 
-Only include files changed compared with another checkout or cache file:
+Show the incremental counts:
+
+```sh
+bonsai . --incremental --incremental-summary
+```
+
+Compare with another checkout or cache file:
 
 ```sh
 bonsai . --incremental-base /path/to/base/repo
 bonsai . --incremental-base /path/to/base.cache
 ```
 
-Print incremental counts:
+Include files changed against a git ref:
 
 ```sh
-bonsai . --incremental --incremental-summary
+bonsai . --changed-since main
 ```
 
-Bonsai stores the file-selection options with the cache. If `--include`, `--exclude`, `--max-file-bytes`, or gitignore handling changes, the next incremental run includes the selected files once instead of comparing against a stale selection.
-
-Clear the local cache for a repo:
+Clear the local parse cache for a repo:
 
 ```sh
 bonsai cache clear
 bonsai cache clear /path/to/repo
 ```
 
-Write starter agent instructions:
+Bonsai stores file-selection options with the cache. If `--include`, `--exclude`, `--max-file-bytes`, or gitignore handling changes, the next incremental run includes selected files once instead of comparing against stale selection.
 
-```sh
-bonsai init-agent
-bonsai init-agent . --force
-```
+## Output
 
-For another project, install `bonsai` on `PATH`, then initialize that project root:
+XML is default. JSON is available with `--format json`.
 
-```sh
-cd /path/to/other/project
-bonsai init-agent
-```
-
-That writes `AGENTS.md` and `CLAUDE.md` with instructions that call `bonsai` from `PATH`, so the same setup works outside this repository.
-
-Measure token savings:
-
-```sh
-bonsai . --max-tokens 12000 --stats
-```
-
-Filter files:
-
-```sh
-bonsai . --include 'src/**' --exclude '**/generated.rs'
-```
-
-Skip files larger than the default 1 MiB limit:
-
-```sh
-bonsai . --max-file-bytes 2097152
-```
-
-Use `--max-file-bytes 0` to disable the size cap.
-
-## Use With Agents
-
-### Plain Paste
-
-Generate context:
-
-```sh
-bonsai . --max-tokens 12000 --level 2 --prompt --output-file /tmp/bonsai-prompt.txt
-```
-
-Paste `/tmp/bonsai-prompt.txt` into an LLM. It starts with:
+Output includes:
 
 ```text
-Use this repo context to explain the architecture, identify the main entry points, and tell me where to start reading.
+metadata     generated time, repo root, token budget, level, file count
+project_map  file path, selected level, token count, optional hash
+files        compressed file content and per-file token count
 ```
+
+Schema details:
+
+```text
+docs/output-schema.md
+```
+
+## Supported Files
+
+Bonsai scans:
+
+```text
+.js .jsx .ts .tsx .py .rs .go .java .cs .swift .kt
+.c .h .cpp .hpp .m .mm
+.vue .svelte .astro .html
+.md .json .yaml .yml .toml
+```
+
+Tree-sitter parsers:
+
+```text
+JavaScript, TypeScript, Python, Rust, Go, Java, C#, Swift, Kotlin, C, C++
+```
+
+Compact line-based context:
+
+```text
+Objective-C, web templates, Markdown, JSON, YAML, TOML
+```
+
+Bonsai respects `.gitignore` and `.cursorignore` by default.
+
+## Use With Codex, Claude, And VS Code
 
 ### Codex
 
@@ -355,12 +333,6 @@ Ask:
 Use $bonsai to compress this repo before answering.
 ```
 
-The helper command is:
-
-```sh
-plugins/bonsai/skills/bonsai/scripts/run_bonsai.sh . 12000 2 /tmp/bonsai.xml
-```
-
 ### Claude Code
 
 This repo includes a Claude Code plugin:
@@ -381,24 +353,6 @@ Use the skill:
 /bonsai:bonsai
 ```
 
-The helper command is:
-
-```sh
-claude/bonsai/bin/bonsai-claude . 12000 2 /tmp/bonsai.xml
-```
-
-For local marketplace testing:
-
-```sh
-claude plugin marketplace add .
-```
-
-Then inside Claude Code:
-
-```text
-/plugin install bonsai@bonsai
-```
-
 ### VS Code
 
 The VS Code extension lives here:
@@ -413,19 +367,10 @@ Install the packaged VSIX:
 code --install-extension copilot/bonsai-vscode/bonsai-vscode-0.3.2.vsix
 ```
 
-Run Command Palette:
+Command Palette commands:
 
 ```text
 Bonsai: Generate and Ask
-```
-
-If chat does not open automatically, paste the copied prompt into Copilot Chat, ChatGPT, or Codex in VS Code.
-
-After each run, the status bar shows token count and file count. Hover it to see the output path.
-
-Other commands:
-
-```text
 Bonsai: Generate Context
 Bonsai: Copy Context Prompt
 Bonsai: Copy Changed Context
@@ -436,97 +381,49 @@ Bonsai: Open Last Context
 
 <img src="images/vscode-flow.svg" alt="Bonsai VS Code flow" width="720">
 
-## Levels
+## Examples
 
-`--level 1` keeps full code first, then shrinks files if the token budget is too small.
+Command palette:
 
-`--level 2` keeps imports, signatures, types, classes, and function shapes. Function bodies become `...`.
+![Command panel](images/panel_cmd.png)
 
-`--level 3` keeps a compact tree map only.
+Output stats:
 
-## Before And After
-
-Full source:
-
-```rust
-fn greet(name: &str) -> String {
-    let message = format!("hello {name}");
-    println!("{message}");
-    message
-}
-```
-
-Skeleton:
-
-```rust
-fn greet(name: &str) -> String { ... }
-```
-
-Tree map:
-
-```text
-fn greet(name: &str) -> String
-```
-
-Markdown and config files are treated differently from source code. Bonsai keeps compact headings, important lines, and top-level config shape.
-
-## Output Format
-
-XML is the default. Use `--format json` for JSON.
-
-Both formats include:
-
-```text
-metadata: generated time, repo root, token budget, compression level, file count
-project map: file paths, selected levels, per-file token counts
-files: compressed file contents with per-file token counts
-```
-
-Schema notes live in:
-
-```text
-docs/output-schema.md
-```
-
-## Supported Files
-
-Bonsai scans:
-
-```text
-.js .jsx .ts .tsx .py .rs .go .java .cs .swift .kt .c .h .cpp .hpp .m .mm .vue .svelte .astro .html .md .json .yaml .yml .toml
-```
-
-It parses JavaScript, TypeScript, Python, Rust, Go, Java, C#, Swift, Kotlin, C, and C++ with tree-sitter. Objective-C, web templates, docs, and config files use compact line-based context.
-
-It respects `.gitignore` and `.cursorignore`.
+![Stats panel](images/panel_stats.png)
 
 ## Troubleshooting
 
 Binary not found:
 
 ```text
-Install with `cargo install --path .`, set `BONSAI_BIN`, or run `cargo build --release`.
+Install Bonsai, put it on PATH, set BONSAI_BIN, or run cargo build --release.
 ```
 
 Clipboard failure:
 
 ```text
-Use `--output file --output-file /tmp/bonsai.xml`.
+Use --output file --output-file /tmp/bonsai.xml.
 Clipboard access can fail in headless shells, remote sessions, or sandboxes.
 ```
 
 No files selected:
 
 ```text
-Run with `--print-files`.
-Check `--include`, `--exclude`, `.gitignore`, and `.cursorignore`.
-Use `--no-respect-gitignore` when ignored files should be included.
+Run with --print-files.
+Check --include, --exclude, .gitignore, and .cursorignore.
+Use --no-respect-gitignore if ignored files should be included.
 ```
 
 Output over budget:
 
 ```text
-Use a smaller target path, add `--exclude`, increase `--max-tokens`, or use `--level 3`.
+Use a smaller path, add --exclude, increase --max-tokens, or use --level 3.
+```
+
+Check parser and tokenizer health:
+
+```sh
+bonsai doctor
 ```
 
 ## Development
@@ -543,13 +440,13 @@ Test:
 cargo test
 ```
 
-Build release binary:
+Build:
 
 ```sh
 cargo build --release
 ```
 
-Build VS Code extension:
+Build the VS Code extension:
 
 ```sh
 cd copilot/bonsai-vscode
@@ -558,30 +455,8 @@ npm run compile
 npm run package
 ```
 
-## Release
+## Names
 
-CI and releases are configured in:
+The GitHub repository, CLI binary, Codex plugin, and Claude plugin are named `bonsai`.
 
-```text
-.github/workflows/ci.yml
-.github/workflows/release.yml
-```
-
-Create a release:
-
-```sh
-git tag v0.3.2
-git push origin v0.3.2
-```
-
-Version bump checklist:
-
-```text
-Cargo.toml
-copilot/bonsai-vscode/package.json
-copilot/bonsai-vscode/package-lock.json
-plugins/bonsai/.codex-plugin/plugin.json
-claude/bonsai/.claude-plugin/plugin.json
-.claude-plugin/marketplace.json, if pinning marketplace version
-README install/package examples
-```
+The VS Code package is named `bonsai-vscode`.
