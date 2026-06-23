@@ -9,15 +9,31 @@ pub struct DirectorySummary {
     pub tokens: usize,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct FormatOptions {
     pub project_map_only: bool,
     pub project_map_mode: ProjectMapMode,
     pub include_file_hashes: bool,
+    pub include_token_counts: bool,
     pub include_files: bool,
     pub include_content: bool,
     pub directory_summaries: Vec<DirectorySummary>,
     pub deleted_files: Vec<String>,
+}
+
+impl Default for FormatOptions {
+    fn default() -> Self {
+        Self {
+            project_map_only: false,
+            project_map_mode: ProjectMapMode::default(),
+            include_file_hashes: false,
+            include_token_counts: true,
+            include_files: false,
+            include_content: false,
+            directory_summaries: Vec::new(),
+            deleted_files: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -47,6 +63,7 @@ pub fn format_repository_context_xml(
             &mut output,
             files,
             options.include_file_hashes,
+            options.include_token_counts,
             options.project_map_mode,
         );
         return output;
@@ -59,10 +76,15 @@ pub fn format_repository_context_xml(
         &mut output,
         files,
         options.include_file_hashes,
+        options.include_token_counts,
         options.project_map_mode,
     );
     push_deleted_files_xml(&mut output, &options.deleted_files);
-    push_directory_summaries_xml(&mut output, &options.directory_summaries);
+    push_directory_summaries_xml(
+        &mut output,
+        &options.directory_summaries,
+        options.include_token_counts,
+    );
 
     if options.include_files {
         output.push_str("<files>\n");
@@ -72,8 +94,10 @@ pub fn format_repository_context_xml(
             push_xml_escaped(&mut output, &file.path);
             output.push_str("\" level=\"");
             output.push_str(&file.level.as_u8().to_string());
-            output.push_str("\" tokens=\"");
-            output.push_str(&file.token_count.to_string());
+            if options.include_token_counts {
+                output.push_str("\" tokens=\"");
+                output.push_str(&file.token_count.to_string());
+            }
             if options.include_content {
                 output.push_str("\">");
                 push_xml_escaped(&mut output, file.content());
@@ -102,6 +126,7 @@ pub fn format_repository_context_json(
             files,
             0,
             options.include_file_hashes,
+            options.include_token_counts,
             options.project_map_mode,
         );
         output.push('\n');
@@ -118,6 +143,7 @@ pub fn format_repository_context_json(
         files,
         2,
         options.include_file_hashes,
+        options.include_token_counts,
         options.project_map_mode,
     );
 
@@ -128,7 +154,12 @@ pub fn format_repository_context_json(
 
     if !options.directory_summaries.is_empty() {
         output.push_str(",\n  \"directory_summaries\": ");
-        push_directory_summaries_json(&mut output, &options.directory_summaries, 2);
+        push_directory_summaries_json(
+            &mut output,
+            &options.directory_summaries,
+            2,
+            options.include_token_counts,
+        );
     }
 
     if options.include_files {
@@ -139,7 +170,12 @@ pub fn format_repository_context_json(
                 output.push_str(",\n");
             }
             output.push_str("    ");
-            push_file_json(&mut output, file, options.include_content);
+            push_file_json(
+                &mut output,
+                file,
+                options.include_content,
+                options.include_token_counts,
+            );
         }
 
         output.push_str("\n  ]");
@@ -167,10 +203,11 @@ fn push_project_map_xml(
     output: &mut String,
     files: &[ProcessedFile],
     include_hash: bool,
+    include_tokens: bool,
     mode: ProjectMapMode,
 ) {
     if mode == ProjectMapMode::Compact {
-        push_compact_project_map_xml(output, files, include_hash);
+        push_compact_project_map_xml(output, files, include_hash, include_tokens);
         return;
     }
 
@@ -180,8 +217,10 @@ fn push_project_map_xml(
         push_xml_escaped(output, &file.path);
         output.push_str("\" level=\"");
         output.push_str(&file.level.as_u8().to_string());
-        output.push_str("\" tokens=\"");
-        output.push_str(&file.token_count.to_string());
+        if include_tokens {
+            output.push_str("\" tokens=\"");
+            output.push_str(&file.token_count.to_string());
+        }
         if include_hash {
             if let Some(hash) = &file.content_hash {
                 output.push_str("\" hash=\"");
@@ -193,23 +232,32 @@ fn push_project_map_xml(
     output.push_str("</project_map>\n");
 }
 
-fn push_compact_project_map_xml(output: &mut String, files: &[ProcessedFile], include_hash: bool) {
+fn push_compact_project_map_xml(
+    output: &mut String,
+    files: &[ProcessedFile],
+    include_hash: bool,
+    include_tokens: bool,
+) {
     output.push_str("<project_map mode=\"compact\">\n");
     for directory in project_map_directories(files) {
         output.push_str("<dir path=\"");
         push_xml_escaped(output, &directory.path);
         output.push_str("\" files=\"");
         output.push_str(&directory.file_count.to_string());
-        output.push_str("\" tokens=\"");
-        output.push_str(&directory.tokens.to_string());
+        if include_tokens {
+            output.push_str("\" tokens=\"");
+            output.push_str(&directory.tokens.to_string());
+        }
         output.push_str("\">\n");
         for file in directory.files {
             output.push_str("<entry name=\"");
             push_xml_escaped(output, file_name(&file.path));
             output.push_str("\" level=\"");
             output.push_str(&file.level.as_u8().to_string());
-            output.push_str("\" tokens=\"");
-            output.push_str(&file.token_count.to_string());
+            if include_tokens {
+                output.push_str("\" tokens=\"");
+                output.push_str(&file.token_count.to_string());
+            }
             if include_hash {
                 if let Some(hash) = &file.content_hash {
                     output.push_str("\" hash=\"");
@@ -223,7 +271,11 @@ fn push_compact_project_map_xml(output: &mut String, files: &[ProcessedFile], in
     output.push_str("</project_map>\n");
 }
 
-fn push_directory_summaries_xml(output: &mut String, summaries: &[DirectorySummary]) {
+fn push_directory_summaries_xml(
+    output: &mut String,
+    summaries: &[DirectorySummary],
+    include_tokens: bool,
+) {
     if summaries.is_empty() {
         return;
     }
@@ -234,8 +286,10 @@ fn push_directory_summaries_xml(output: &mut String, summaries: &[DirectorySumma
         push_xml_escaped(output, &summary.path);
         output.push_str("\" files=\"");
         output.push_str(&summary.file_count.to_string());
-        output.push_str("\" tokens=\"");
-        output.push_str(&summary.tokens.to_string());
+        if include_tokens {
+            output.push_str("\" tokens=\"");
+            output.push_str(&summary.tokens.to_string());
+        }
         output.push_str("\" />\n");
     }
     output.push_str("</directory_summaries>\n");
@@ -295,10 +349,11 @@ fn push_project_map_json(
     files: &[ProcessedFile],
     indent: usize,
     include_hash: bool,
+    include_tokens: bool,
     mode: ProjectMapMode,
 ) {
     if mode == ProjectMapMode::Compact {
-        push_compact_project_map_json(output, files, indent, include_hash);
+        push_compact_project_map_json(output, files, indent, include_hash, include_tokens);
         return;
     }
 
@@ -311,7 +366,7 @@ fn push_project_map_json(
             output.push_str(",\n");
         }
         output.push_str(&item);
-        push_file_map_json(output, file, include_hash);
+        push_file_map_json(output, file, include_hash, include_tokens);
     }
 
     output.push('\n');
@@ -324,6 +379,7 @@ fn push_compact_project_map_json(
     files: &[ProcessedFile],
     indent: usize,
     include_hash: bool,
+    include_tokens: bool,
 ) {
     let base = " ".repeat(indent);
     let item = " ".repeat(indent + 2);
@@ -338,15 +394,17 @@ fn push_compact_project_map_json(
         push_json_escaped(output, &directory.path);
         output.push_str("\",\"files\":");
         output.push_str(&directory.file_count.to_string());
-        output.push_str(",\"tokens\":");
-        output.push_str(&directory.tokens.to_string());
+        if include_tokens {
+            output.push_str(",\"tokens\":");
+            output.push_str(&directory.tokens.to_string());
+        }
         output.push_str(",\"entries\":[");
 
         for (file_index, file) in directory.files.iter().enumerate() {
             if file_index > 0 {
                 output.push(',');
             }
-            push_compact_file_map_json(output, file, include_hash);
+            push_compact_file_map_json(output, file, include_hash, include_tokens);
         }
 
         output.push_str("]}");
@@ -357,13 +415,20 @@ fn push_compact_project_map_json(
     output.push(']');
 }
 
-fn push_compact_file_map_json(output: &mut String, file: &ProcessedFile, include_hash: bool) {
+fn push_compact_file_map_json(
+    output: &mut String,
+    file: &ProcessedFile,
+    include_hash: bool,
+    include_tokens: bool,
+) {
     output.push_str("{\"name\":\"");
     push_json_escaped(output, file_name(&file.path));
     output.push_str("\",\"level\":");
     output.push_str(&file.level.as_u8().to_string());
-    output.push_str(",\"tokens\":");
-    output.push_str(&file.token_count.to_string());
+    if include_tokens {
+        output.push_str(",\"tokens\":");
+        output.push_str(&file.token_count.to_string());
+    }
     if include_hash {
         if let Some(hash) = &file.content_hash {
             output.push_str(",\"hash\":\"");
@@ -416,6 +481,7 @@ fn push_directory_summaries_json(
     output: &mut String,
     summaries: &[DirectorySummary],
     indent: usize,
+    include_tokens: bool,
 ) {
     let base = " ".repeat(indent);
     let item = " ".repeat(indent + 2);
@@ -430,8 +496,10 @@ fn push_directory_summaries_json(
         push_json_escaped(output, &summary.path);
         output.push_str("\",\"files\":");
         output.push_str(&summary.file_count.to_string());
-        output.push_str(",\"tokens\":");
-        output.push_str(&summary.tokens.to_string());
+        if include_tokens {
+            output.push_str(",\"tokens\":");
+            output.push_str(&summary.tokens.to_string());
+        }
         output.push('}');
     }
 
@@ -440,13 +508,20 @@ fn push_directory_summaries_json(
     output.push(']');
 }
 
-fn push_file_map_json(output: &mut String, file: &ProcessedFile, include_hash: bool) {
+fn push_file_map_json(
+    output: &mut String,
+    file: &ProcessedFile,
+    include_hash: bool,
+    include_tokens: bool,
+) {
     output.push_str("{\"path\":\"");
     push_json_escaped(output, &file.path);
     output.push_str("\",\"level\":");
     output.push_str(&file.level.as_u8().to_string());
-    output.push_str(",\"tokens\":");
-    output.push_str(&file.token_count.to_string());
+    if include_tokens {
+        output.push_str(",\"tokens\":");
+        output.push_str(&file.token_count.to_string());
+    }
     if include_hash {
         if let Some(hash) = &file.content_hash {
             output.push_str(",\"hash\":\"");
@@ -457,13 +532,20 @@ fn push_file_map_json(output: &mut String, file: &ProcessedFile, include_hash: b
     output.push_str("}");
 }
 
-fn push_file_json(output: &mut String, file: &ProcessedFile, include_content: bool) {
+fn push_file_json(
+    output: &mut String,
+    file: &ProcessedFile,
+    include_content: bool,
+    include_tokens: bool,
+) {
     output.push_str("{\"path\":\"");
     push_json_escaped(output, &file.path);
     output.push_str("\",\"level\":");
     output.push_str(&file.level.as_u8().to_string());
-    output.push_str(",\"tokens\":");
-    output.push_str(&file.token_count.to_string());
+    if include_tokens {
+        output.push_str(",\"tokens\":");
+        output.push_str(&file.token_count.to_string());
+    }
     if include_content {
         output.push_str(",\"content\":\"");
         push_json_escaped(output, file.content());
@@ -596,6 +678,41 @@ mod tests {
         assert!(!xml.contains("path=\"src/lib.rs\" level=\"2\""));
         assert!(json.contains("\"path\":\"src\",\"files\":1,\"tokens\":7"));
         assert!(json.contains("\"entries\":[{\"name\":\"lib.rs\",\"level\":2,\"tokens\":7}]"));
+    }
+
+    #[test]
+    fn can_omit_token_counts() {
+        let mut root = processed_file();
+        root.path = "Cargo.toml".to_owned();
+        root.token_count = 5;
+        let mut nested = processed_file();
+        nested.path = "src/lib.rs".to_owned();
+        nested.token_count = 7;
+        let files = vec![root, nested];
+        let options = FormatOptions {
+            project_map_mode: ProjectMapMode::Compact,
+            include_token_counts: false,
+            include_files: true,
+            include_content: true,
+            directory_summaries: vec![DirectorySummary {
+                path: "src".to_owned(),
+                file_count: 1,
+                tokens: 7,
+            }],
+            ..FormatOptions::default()
+        };
+
+        let xml = format_repository_context_xml(&files, &metadata(), &options);
+        let json = format_repository_context_json(&files, &metadata(), &options);
+
+        assert!(xml.contains("<dir path=\"src\" files=\"1\">"));
+        assert!(xml.contains("<entry name=\"lib.rs\" level=\"2\" />"));
+        assert!(xml.contains("<file path=\"src/lib.rs\" level=\"2\">"));
+        assert!(!xml.contains(" tokens=\""));
+        assert!(json.contains("\"path\":\"src\",\"files\":1,\"entries\""));
+        assert!(json.contains("\"name\":\"lib.rs\",\"level\":2"));
+        assert!(json.contains("\"path\":\"src/lib.rs\",\"level\":2,\"content\""));
+        assert!(!json.contains("\"tokens\""));
     }
 
     #[test]

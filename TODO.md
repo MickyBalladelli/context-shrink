@@ -2,7 +2,6 @@
 
 ## Token Cost Improvements
 
-- Add `--no-token-counts` to omit per-file token counts from XML/JSON when agents do not need them.
 - Add `--format jsonl` or `--format text` as a lower-overhead alternative to XML.
 - Add `--exclude-generated` to skip minified, vendored, generated, and lockfile-like files unless explicitly included.
 - Collapse long import/include/use blocks by language: keep first few, then `... N more imports`.

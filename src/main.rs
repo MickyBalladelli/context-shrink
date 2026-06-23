@@ -78,6 +78,9 @@ struct Cli {
     #[arg(long, help = "Include stable content hashes in project map entries")]
     file_hashes: bool,
 
+    #[arg(long, help = "Omit token count fields from XML and JSON output")]
+    no_token_counts: bool,
+
     #[arg(long)]
     no_content: bool,
 
@@ -1265,6 +1268,7 @@ fn format_options(files: &[ProcessedFile], cli: &Cli, deleted_files: &[String]) 
         project_map_only: cli.project_map_only,
         project_map_mode: cli.project_map.into(),
         include_file_hashes: cli.file_hashes,
+        include_token_counts: !cli.no_token_counts,
         include_files: !cli.project_map_only && !cli.no_content,
         include_content: !cli.project_map_only && !cli.no_content,
         deleted_files: if cli.project_map_only {
@@ -1696,6 +1700,7 @@ mod tests {
             project_map_only: false,
             project_map: ProjectMapMode::Flat,
             file_hashes: false,
+            no_token_counts: false,
             no_content: false,
             dry_run: false,
             sort: SortMode::Path,

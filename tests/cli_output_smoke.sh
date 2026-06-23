@@ -56,6 +56,23 @@ if grep -Fq '<files>' "$tmp_root/no-content.xml"; then
   exit 1
 fi
 
+"$bin" "$repo" --no-token-counts --project-map compact --directory-summaries --output-file "$tmp_root/no-token-counts.xml"
+grep -Fq '<project_map mode="compact">' "$tmp_root/no-token-counts.xml"
+grep -Fq '<dir path="src/deep" files="1">' "$tmp_root/no-token-counts.xml"
+grep -Fq '<entry name="leaf.rs" level="2" />' "$tmp_root/no-token-counts.xml"
+if grep -Fq ' tokens="' "$tmp_root/no-token-counts.xml"; then
+  printf 'no-token-counts XML included token attributes\n' >&2
+  exit 1
+fi
+
+"$bin" "$repo" --no-token-counts --format json --output-file "$tmp_root/no-token-counts.json"
+grep -Fq '"project_map"' "$tmp_root/no-token-counts.json"
+grep -Fq '"files"' "$tmp_root/no-token-counts.json"
+if grep -Fq '"tokens":' "$tmp_root/no-token-counts.json"; then
+  printf 'no-token-counts JSON included token fields\n' >&2
+  exit 1
+fi
+
 "$bin" "$repo" --directory-summaries --output-file "$tmp_root/dirs.xml"
 grep -Fq '<directory_summaries>' "$tmp_root/dirs.xml"
 grep -Fq 'path="src/deep"' "$tmp_root/dirs.xml"

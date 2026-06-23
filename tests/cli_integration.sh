@@ -30,16 +30,18 @@ completion_snippets() {
   printf '[bash]\n'
   grep -F '            bonsai,init-agent)' "$bash_file"
   grep -F '            bonsai,completions)' "$bash_file"
-  grep -F -- '--project-map --file-hashes' "$bash_file" | head -n 1
+  grep -F -- '--project-map --file-hashes --no-token-counts' "$bash_file" | head -n 1
   grep -F '            opts="-h --tokenizer --json --help [PATH]"' "$bash_file"
   printf '[zsh]\n'
   grep -F -- "'--project-map=[]:PROJECT_MAP:(flat compact)' \\" "$zsh_file"
+  grep -F -- "'--no-token-counts[Omit token count fields from XML and JSON output]' \\" "$zsh_file"
   grep -F -- "'--changed-since=[Only include tracked changes and untracked files compared with this git ref]:GIT_REF:_default' \\" "$zsh_file"
   grep -F -- "'--drop-low-priority[Omit lowest-priority files if tree-map output still exceeds --max-tokens]' \\" "$zsh_file"
   grep -F -- "'--json[]' \\" "$zsh_file"
   grep -F -- "'completions:Generate shell completions' \\" "$zsh_file" | head -n 1
   printf '[fish]\n'
   grep -F 'complete -c bonsai -n "__fish_bonsai_needs_command" -l changed-since -d '"'"'Only include tracked changes and untracked files compared with this git ref'"'"' -r' "$fish_file"
+  grep -F 'complete -c bonsai -n "__fish_bonsai_needs_command" -l no-token-counts -d '"'"'Omit token count fields from XML and JSON output'"'"'' "$fish_file"
   grep -F 'complete -c bonsai -n "__fish_bonsai_needs_command" -l drop-low-priority -d '"'"'Omit lowest-priority files if tree-map output still exceeds --max-tokens'"'"'' "$fish_file"
   grep -F 'complete -c bonsai -n "__fish_bonsai_needs_command" -l project-map -r -f -a "flat' "$fish_file"
   grep -F 'complete -c bonsai -n "__fish_bonsai_using_subcommand doctor" -l json' "$fish_file"

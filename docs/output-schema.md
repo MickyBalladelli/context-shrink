@@ -30,6 +30,8 @@ Default XML shape:
 
 `--no-content` omits `files`.
 
+`--no-token-counts` omits `tokens` attributes from `project_map`, `directory_summaries`, and `files`.
+
 `--changed-since <git-ref>` uses `git diff` and emits added/changed files plus deleted file markers.
 
 `--project-map-only` emits only:
@@ -54,6 +56,12 @@ Default XML shape:
 
 ```xml
 <entry path="src/main.rs" level="2" tokens="120" hash="sha256_hex" />
+```
+
+With `--no-token-counts`, token attributes are omitted:
+
+```xml
+<entry path="src/main.rs" level="2" />
 ```
 
 ## JSON
@@ -95,6 +103,8 @@ Default JSON shape:
 
 `--no-content` omits `files`.
 
+`--no-token-counts` omits `tokens` fields from `project_map`, `directory_summaries`, and `files`.
+
 `--changed-since <git-ref>` uses `git diff` and emits added/changed files plus deleted file markers.
 
 `--project-map-only` emits only the project map array:
@@ -119,4 +129,10 @@ Default JSON shape:
 
 ```json
 { "path": "src/main.rs", "level": 2, "tokens": 120, "hash": "sha256_hex" }
+```
+
+With `--no-token-counts`, token fields are omitted:
+
+```json
+{ "path": "src/main.rs", "level": 2 }
 ```

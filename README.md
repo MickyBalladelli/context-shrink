@@ -203,6 +203,12 @@ Include stable file hashes in the project map:
 bonsai . --file-hashes
 ```
 
+Omit token count fields from XML/JSON:
+
+```sh
+bonsai . --no-token-counts
+```
+
 Write metadata and project map without file bodies:
 
 ```sh
@@ -314,6 +320,8 @@ metadata     generated time, repo root, token budget, level, file count
 project_map  file path, selected level, token count, optional hash
 files        compressed file content and per-file token count
 ```
+
+Use `--no-token-counts` to omit token count fields from XML/JSON output.
 
 Schema details:
 
