@@ -88,6 +88,25 @@ if test -s "$tmp_root/quiet.txt"; then
 fi
 test -f "$tmp_root/quiet.xml"
 
+drop_repo="$tmp_root/drop-repo"
+mkdir -p "$drop_repo/src/generated/deep"
+cat > "$drop_repo/Cargo.toml" <<'TOML'
+[package]
+name="demo"
+version="0.1.0"
+TOML
+for index in 1 2 3; do
+  printf 'pub fn generated_%s() {}\n' "$index" > "$drop_repo/src/generated/deep/file$index.rs"
+done
+"$bin" "$drop_repo" --max-tokens 155 --drop-low-priority --summary --output-file "$tmp_root/drop.xml" > "$tmp_root/drop.txt"
+grep -Fq '  files_included: 1' "$tmp_root/drop.txt"
+grep -Fq '  files_dropped: 3' "$tmp_root/drop.txt"
+grep -Fq 'path="Cargo.toml"' "$tmp_root/drop.xml"
+if grep -Fq 'src/generated/deep' "$tmp_root/drop.xml"; then
+  printf 'drop-low-priority kept generated files\n' >&2
+  exit 1
+fi
+
 "$bin" completions bash > "$tmp_root/bonsai.bash"
 "$bin" completions zsh > "$tmp_root/_bonsai"
 "$bin" completions fish > "$tmp_root/bonsai.fish"

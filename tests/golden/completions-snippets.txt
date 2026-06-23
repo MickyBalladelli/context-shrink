@@ -1,12 +1,15 @@
 [bash]
             bonsai,init-agent)
             bonsai,completions)
+            opts="-h -V --max-tokens --tokenizer --max-file-bytes --level --output --output-file --format --project-map-only --file-hashes --no-content --dry-run --sort --directory-summaries --fail-over-budget --drop-low-priority --incremental --incremental-base --changed-since --incremental-summary --include --exclude --no-respect-gitignore --print-files --fail-on-empty --quiet --stats --detailed-stats --summary --prompt --ask-template --help --version [PATH] init-agent cache doctor completions help"
             opts="-h --tokenizer --json --help [PATH]"
 [zsh]
 '--changed-since=[Only include tracked changes and untracked files compared with this git ref]:GIT_REF:_default' \
+'--drop-low-priority[Omit lowest-priority files if tree-map output still exceeds --max-tokens]' \
 '--json[]' \
 'completions:Generate shell completions' \
 [fish]
 complete -c bonsai -n "__fish_bonsai_needs_command" -l changed-since -d 'Only include tracked changes and untracked files compared with this git ref' -r
+complete -c bonsai -n "__fish_bonsai_needs_command" -l drop-low-priority -d 'Omit lowest-priority files if tree-map output still exceeds --max-tokens'
 complete -c bonsai -n "__fish_bonsai_using_subcommand doctor" -l json
 complete -c bonsai -n "__fish_bonsai_needs_command" -a "completions" -d 'Generate shell completions'

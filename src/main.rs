@@ -95,6 +95,12 @@ struct Cli {
 
     #[arg(
         long,
+        help = "Omit lowest-priority files if tree-map output still exceeds --max-tokens"
+    )]
+    drop_low_priority: bool,
+
+    #[arg(
+        long,
         help = "Only include files added or changed since the last cached local run"
     )]
     incremental: bool,
@@ -363,13 +369,14 @@ fn main() -> Result<()> {
     let content_budget =
         reserved_content_budget(&files, &metadata, &cli, &token_counter, &deleted_files)?;
     let optimized = optimize_budget(files, content_budget, &token_counter)?;
-    let (mut optimized, context, output_tokens) =
+    let (mut optimized, context, output_tokens, dropped_files) =
         fit_formatted_context(optimized, &metadata, &cli, &token_counter, &deleted_files)?;
     sort_files(&mut optimized, cli.sort);
     let run_stats = RunStats::new(
         &cli,
         requested_level,
         optimized.len(),
+        dropped_files,
         raw_context.as_deref(),
         output_tokens,
         &token_counter,
@@ -1162,6 +1169,7 @@ fn deleted_files(
 struct RunStats {
     output_target: String,
     files_scanned: usize,
+    files_dropped: usize,
     selected_level: CompressionLevel,
     max_tokens: usize,
     tokenizer: TokenizerKind,
@@ -1176,6 +1184,7 @@ impl RunStats {
         cli: &Cli,
         selected_level: CompressionLevel,
         files_scanned: usize,
+        files_dropped: usize,
         raw_context: Option<&str>,
         shrunk_tokens: usize,
         counter: &TokenCounter,
@@ -1193,6 +1202,7 @@ impl RunStats {
         Ok(Self {
             output_target: output_target(cli),
             files_scanned,
+            files_dropped,
             selected_level,
             max_tokens: cli.max_tokens,
             tokenizer: counter.tokenizer(),
@@ -1257,16 +1267,57 @@ fn fit_formatted_context(
     cli: &Cli,
     counter: &TokenCounter,
     deleted_files: &[String],
-) -> Result<(Vec<ProcessedFile>, String, usize)> {
+) -> Result<(Vec<ProcessedFile>, String, usize, usize)> {
+    let mut dropped_files = 0usize;
+
     loop {
         sort_files(&mut files, cli.sort);
-        let context = maybe_wrap_prompt(format_context(&files, metadata, cli, deleted_files), cli);
+        let mut current_metadata = metadata.clone();
+        current_metadata.file_count = files.len();
+        let context = maybe_wrap_prompt(
+            format_context(&files, &current_metadata, cli, deleted_files),
+            cli,
+        );
         let output_tokens = count_text_tokens(&context, counter);
 
-        if output_tokens <= cli.max_tokens || !downgrade_largest_file(&mut files, counter) {
-            return Ok((files, context, output_tokens));
+        if output_tokens <= cli.max_tokens {
+            return Ok((files, context, output_tokens, dropped_files));
         }
+
+        if downgrade_largest_file(&mut files, counter) {
+            continue;
+        }
+
+        if cli.drop_low_priority && drop_lowest_priority_file(&mut files) {
+            dropped_files += 1;
+            continue;
+        }
+
+        return Ok((files, context, output_tokens, dropped_files));
     }
+}
+
+fn drop_lowest_priority_file(files: &mut Vec<ProcessedFile>) -> bool {
+    if files.len() <= 1 {
+        return false;
+    }
+
+    let Some(index) = files
+        .iter()
+        .enumerate()
+        .min_by(|(_, left), (_, right)| {
+            file_priority_score(left)
+                .cmp(&file_priority_score(right))
+                .then(right.token_count.cmp(&left.token_count))
+                .then(right.path.cmp(&left.path))
+        })
+        .map(|(index, _)| index)
+    else {
+        return false;
+    };
+
+    files.remove(index);
+    true
 }
 
 fn reserved_content_budget(
@@ -1419,6 +1470,7 @@ fn print_summary(stats: &RunStats) {
     println!("summary:");
     println!("  output: {}", stats.output_target);
     println!("  files_included: {}", stats.files_scanned);
+    println!("  files_dropped: {}", stats.files_dropped);
     println!("  selected_level: {}", stats.selected_level.as_u8());
     println!("  tokenizer: {}", stats.tokenizer.as_str());
     println!(
@@ -1437,6 +1489,7 @@ fn print_stats(stats: &RunStats) {
         stats.saving_percent.unwrap_or(0.0)
     );
     println!("  files_scanned: {}", stats.files_scanned);
+    println!("  files_dropped: {}", stats.files_dropped);
 }
 
 fn print_incremental_summary(counts: &IncrementalCounts) {
@@ -1539,6 +1592,51 @@ mod tests {
         assert_final_token_count_matches(OutputFormat::Json);
     }
 
+    #[test]
+    fn drop_low_priority_prunes_after_tree_map() {
+        let mut cli = test_cli(OutputFormat::Xml);
+        cli.max_tokens = 115;
+        cli.drop_low_priority = true;
+        let counter = TokenCounter::new(cli.tokenizer).unwrap();
+        let metadata = RepositoryMetadata {
+            generated_at: "1234567890".to_owned(),
+            repo_root: "/tmp/demo".to_owned(),
+            max_tokens: cli.max_tokens,
+            compression_level: 2,
+            file_count: 2,
+        };
+        let files = vec![
+            ProcessedFile::new(
+                "README.md".to_owned(),
+                CompressionLevel::TreeMap,
+                FileVariants {
+                    full: None,
+                    skeleton: "README".to_owned(),
+                    tree_map: "README".to_owned(),
+                },
+            ),
+            ProcessedFile::new(
+                "src/generated/deep/file.rs".to_owned(),
+                CompressionLevel::TreeMap,
+                FileVariants {
+                    full: None,
+                    skeleton: "generated".to_owned(),
+                    tree_map: "generated".to_owned(),
+                },
+            ),
+        ];
+
+        let (files, context, output_tokens, dropped) =
+            fit_formatted_context(files, &metadata, &cli, &counter, &[]).unwrap();
+
+        assert_eq!(dropped, 1);
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path, "README.md");
+        assert!(output_tokens <= cli.max_tokens);
+        assert!(context.contains("file_count=\"1\""));
+        assert!(!context.contains("src/generated/deep/file.rs"));
+    }
+
     fn assert_final_token_count_matches(format: OutputFormat) {
         let cli = test_cli(format);
         let counter = TokenCounter::new(cli.tokenizer).unwrap();
@@ -1559,7 +1657,7 @@ mod tests {
             },
         )];
 
-        let (_files, context, output_tokens) =
+        let (_files, context, output_tokens, _dropped) =
             fit_formatted_context(files, &metadata, &cli, &counter, &[]).unwrap();
 
         assert_eq!(output_tokens, count_text_tokens(&context, &counter));
@@ -1583,6 +1681,7 @@ mod tests {
             sort: SortMode::Path,
             directory_summaries: false,
             fail_over_budget: false,
+            drop_low_priority: false,
             incremental: false,
             incremental_base: None,
             changed_since: None,

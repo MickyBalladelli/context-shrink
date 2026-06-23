@@ -260,6 +260,12 @@ Fail if output cannot fit after maximum compression:
 bonsai . --max-tokens 12000 --fail-over-budget
 ```
 
+Drop lowest-priority files if maximum compression still does not fit:
+
+```sh
+bonsai . --max-tokens 12000 --drop-low-priority
+```
+
 ## Change-Focused Context
 
 Only include files changed since the last cached local run:
