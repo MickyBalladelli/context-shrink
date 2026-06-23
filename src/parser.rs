@@ -837,6 +837,7 @@ fn compact_config_lines(path: &Path, source: &str, max_lines: usize) -> String {
     let mut output = Vec::new();
     let mut kept_array_items = 0usize;
     let mut collapsed_array = false;
+    let mut sections: Vec<ConfigSection> = Vec::new();
 
     for raw_line in source.lines() {
         let line = raw_line.trim();
@@ -852,8 +853,24 @@ fn compact_config_lines(path: &Path, source: &str, max_lines: usize) -> String {
             continue;
         }
 
+        let indent = leading_whitespace(raw_line);
+        close_config_sections(path, line, indent, &mut sections);
+        let parent_important = sections.last().is_some_and(|section| section.important);
+        let in_unimportant_section = sections.last().is_some_and(|section| !section.important);
+        let line_key = config_line_key(path, line);
+        let line_important = line_key.as_deref().is_some_and(is_important_config_key)
+            || is_important_config_line(line);
+        let keep_nested = parent_important || line_important;
+
         if is_array_item(line) {
             kept_array_items += 1;
+            if !keep_nested {
+                if !collapsed_array {
+                    output.push("...".to_owned());
+                    collapsed_array = true;
+                }
+                continue;
+            }
             if kept_array_items > 12 {
                 if !collapsed_array {
                     output.push("...".to_owned());
@@ -866,10 +883,14 @@ fn compact_config_lines(path: &Path, source: &str, max_lines: usize) -> String {
             collapsed_array = false;
         }
 
-        if is_top_level_config_line(line) || is_important_config_line(line) || kept_array_items > 0
-        {
+        let top_level = is_top_level_config_line(line, indent)
+            && !in_unimportant_section
+            && (!is_toml_table_line(line) || keep_nested);
+        if top_level || keep_nested || kept_array_items > 0 {
             output.push(truncate_line(line.to_owned(), 240));
         }
+
+        open_config_section(path, line, indent, keep_nested, &mut sections);
 
         if output.len() >= max_lines {
             break;
@@ -881,6 +902,72 @@ fn compact_config_lines(path: &Path, source: &str, max_lines: usize) -> String {
     } else {
         dedupe_preserving_order(output).join("\n")
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ConfigSection {
+    indent: usize,
+    important: bool,
+    toml_table: bool,
+}
+
+fn leading_whitespace(line: &str) -> usize {
+    line.chars()
+        .take_while(|ch| matches!(ch, ' ' | '\t'))
+        .map(|ch| if ch == '\t' { 2 } else { 1 })
+        .sum()
+}
+
+fn close_config_sections(
+    path: &Path,
+    line: &str,
+    indent: usize,
+    sections: &mut Vec<ConfigSection>,
+) {
+    if matches!(extension(path).as_deref(), Some("toml")) {
+        if is_toml_table_line(line) {
+            while sections.last().is_some_and(|section| section.toml_table) {
+                sections.pop();
+            }
+        }
+        return;
+    }
+
+    if line.starts_with('}') || line.starts_with(']') {
+        sections.pop();
+        return;
+    }
+
+    while sections
+        .last()
+        .is_some_and(|section| indent <= section.indent)
+    {
+        sections.pop();
+    }
+}
+
+fn open_config_section(
+    path: &Path,
+    line: &str,
+    indent: usize,
+    important: bool,
+    sections: &mut Vec<ConfigSection>,
+) {
+    let opens_structural_block = line.ends_with('{') || line.ends_with('[') || line.ends_with(":");
+    let opens_toml_table =
+        matches!(extension(path).as_deref(), Some("toml")) && is_toml_table_line(line);
+
+    if opens_structural_block || opens_toml_table {
+        sections.push(ConfigSection {
+            indent,
+            important,
+            toml_table: opens_toml_table,
+        });
+    }
+}
+
+fn is_toml_table_line(line: &str) -> bool {
+    line.starts_with('[') && line.ends_with(']')
 }
 
 fn is_noisy_config_line(line: &str) -> bool {
@@ -904,47 +991,85 @@ fn is_top_level_config_comment(path: &Path, raw_line: &str) -> bool {
 }
 
 fn is_array_item(line: &str) -> bool {
-    line.starts_with('"')
+    (line.starts_with('"') && !line.contains(':'))
         || line.starts_with('{')
         || line.starts_with('-')
         || line.starts_with("[[")
-        || line.ends_with(',')
+        || (line.ends_with(',') && !line.contains(':') && !line.contains('='))
 }
 
-fn is_top_level_config_line(line: &str) -> bool {
+fn is_top_level_config_line(line: &str, indent: usize) -> bool {
     line.starts_with('[')
         || line.starts_with("[[")
-        || line.starts_with('"')
-        || (!line.starts_with('-')
-            && !line.starts_with(' ')
-            && (line.contains(':') || line.contains('=')))
+        || (indent <= 2 && line.starts_with('"'))
+        || (!line.starts_with('-') && indent == 0 && (line.contains(':') || line.contains('=')))
 }
 
 fn is_important_config_line(line: &str) -> bool {
-    let lower = line.to_ascii_lowercase();
-    [
-        "name",
-        "version",
-        "description",
-        "scripts",
-        "dependencies",
-        "devdependencies",
-        "peerdependencies",
-        "workspaces",
-        "jobs",
-        "steps",
-        "runs-on",
-        "plugins",
-        "skills",
-        "contributes",
-        "activationevents",
-        "commands",
-        "configuration",
-        "package",
-        "bin",
-    ]
-    .iter()
-    .any(|key| lower.contains(key))
+    config_line_key_from_trimmed(line).is_some_and(|key| is_important_config_key(&key))
+}
+
+const IMPORTANT_CONFIG_KEYS: &[&str] = &[
+    "name",
+    "version",
+    "description",
+    "scripts",
+    "dependencies",
+    "devdependencies",
+    "peerdependencies",
+    "workspaces",
+    "jobs",
+    "steps",
+    "runs-on",
+    "plugins",
+    "skills",
+    "contributes",
+    "activationevents",
+    "commands",
+    "configuration",
+    "package",
+    "bin",
+    "env",
+    "permissions",
+    "services",
+    "matrix",
+];
+
+fn is_important_config_key(key: &str) -> bool {
+    let lower = key.to_ascii_lowercase();
+    IMPORTANT_CONFIG_KEYS.iter().any(|important| {
+        lower == *important
+            || lower.ends_with(&format!(".{important}"))
+            || lower.ends_with(&format!("-{important}"))
+    })
+}
+
+fn config_line_key(path: &Path, line: &str) -> Option<String> {
+    match extension(path).as_deref() {
+        Some("toml") if line.starts_with('[') && line.ends_with(']') => Some(
+            line.trim_matches(|ch| ch == '[' || ch == ']')
+                .trim()
+                .to_ascii_lowercase(),
+        ),
+        _ => config_line_key_from_trimmed(line),
+    }
+}
+
+fn config_line_key_from_trimmed(line: &str) -> Option<String> {
+    if let Some(after_quote) = line.strip_prefix('"') {
+        let key = after_quote.split('"').next()?;
+        return Some(key.to_ascii_lowercase());
+    }
+
+    if let Some((key, _)) = line.split_once(':') {
+        return Some(key.trim().trim_matches('"').to_ascii_lowercase());
+    }
+
+    if let Some((key, _)) = line.split_once('=') {
+        return Some(key.trim().trim_matches('"').to_ascii_lowercase());
+    }
+
+    None
 }
 
 fn compact_non_empty_lines(source: &str, max_lines: usize) -> String {
@@ -1540,6 +1665,75 @@ serde = "1"
         assert!(toml.skeleton.contains("# nested-ish dependency note"));
         assert!(json.skeleton.contains("// jsonc-style top note"));
         assert!(!json.skeleton.contains("nested note"));
+    }
+
+    #[test]
+    fn config_keeps_nested_important_sections() {
+        let json_path = write_temp_source(
+            "json",
+            r#"
+{
+  "name": "demo",
+  "scripts": {
+    "build": "vite build",
+    "test": "cargo test"
+  },
+  "dependencies": {
+    "serde": "1",
+    "tokio": "1"
+  },
+  "fixtures": {
+    "large": [
+      "ignore-me"
+    ]
+  }
+}
+"#,
+        );
+        let yaml_path = write_temp_source(
+            "yaml",
+            r#"
+name: demo
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo test
+metadata:
+  fixtures:
+    - ignore-me
+"#,
+        );
+        let toml_path = write_temp_source(
+            "toml",
+            r#"
+name = "demo"
+
+[workspace.dependencies]
+serde = "1"
+tokio = "1"
+
+[package.metadata.fixtures]
+large = "ignore-me"
+"#,
+        );
+
+        let json = compress_file(&json_path, CompressionLevel::Skeleton).unwrap();
+        let yaml = compress_file(&yaml_path, CompressionLevel::Skeleton).unwrap();
+        let toml = compress_file(&toml_path, CompressionLevel::Skeleton).unwrap();
+
+        assert!(json.skeleton.contains("\"build\": \"vite build\""));
+        assert!(json.skeleton.contains("\"serde\": \"1\""));
+        assert!(!json.skeleton.contains("ignore-me"));
+        assert!(yaml.skeleton.contains("runs-on: ubuntu-latest"));
+        assert!(yaml.skeleton.contains("- uses: actions/checkout@v4"));
+        assert!(yaml.skeleton.contains("- run: cargo test"));
+        assert!(!yaml.skeleton.contains("ignore-me"));
+        assert!(toml.skeleton.contains("[workspace.dependencies]"));
+        assert!(toml.skeleton.contains("serde = \"1\""));
+        assert!(toml.skeleton.contains("tokio = \"1\""));
+        assert!(!toml.skeleton.contains("ignore-me"));
     }
 
     #[test]
