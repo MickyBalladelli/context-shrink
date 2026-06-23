@@ -58,6 +58,16 @@ if [[ "$first_path" != '"path":"Cargo.toml"' ]]; then
   exit 1
 fi
 
+"$bin" "$repo" --dry-run --output-file "$tmp_root/dry-run.xml" > "$tmp_root/dry-run.txt"
+grep -Fq 'dry_run:' "$tmp_root/dry-run.txt"
+grep -Fq '  estimated_tokens:' "$tmp_root/dry-run.txt"
+grep -Fq 'selected_files:' "$tmp_root/dry-run.txt"
+grep -Fq 'Cargo.toml' "$tmp_root/dry-run.txt"
+if test -e "$tmp_root/dry-run.xml"; then
+  printf 'dry-run wrote output file\n' >&2
+  exit 1
+fi
+
 "$bin" doctor "$repo" --tokenizer cl100k_base > "$tmp_root/doctor.txt"
 grep -Fq 'bonsai doctor:' "$tmp_root/doctor.txt"
 grep -Fq '  binary:' "$tmp_root/doctor.txt"

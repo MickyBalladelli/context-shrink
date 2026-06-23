@@ -204,6 +204,12 @@ Show selected files:
 bonsai . --print-files
 ```
 
+Preview selected files and estimated tokens without writing output:
+
+```sh
+bonsai . --dry-run
+```
+
 Filter files:
 
 ```sh

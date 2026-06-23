@@ -76,6 +76,12 @@ struct Cli {
     #[arg(long)]
     no_content: bool,
 
+    #[arg(
+        long,
+        help = "Print selected files and estimated tokens without writing output"
+    )]
+    dry_run: bool,
+
     #[arg(long, value_enum, default_value_t = SortMode::Path)]
     sort: SortMode,
 
@@ -316,21 +322,27 @@ fn main() -> Result<()> {
         }
     }
 
-    match cli.output {
-        OutputDestination::Clipboard => {
-            let mut clipboard = arboard::Clipboard::new().context("cannot access clipboard")?;
-            clipboard
-                .set_text(context)
-                .context("cannot write clipboard")?;
-        }
-        OutputDestination::File => {
-            fs::write(&cli.output_file, context)
-                .with_context(|| format!("cannot write {}", cli.output_file.display()))?;
+    if cli.dry_run {
+        print_dry_run(&optimized, &deleted_files, output_tokens, cli.max_tokens);
+    } else {
+        match cli.output {
+            OutputDestination::Clipboard => {
+                let mut clipboard = arboard::Clipboard::new().context("cannot access clipboard")?;
+                clipboard
+                    .set_text(context)
+                    .context("cannot write clipboard")?;
+            }
+            OutputDestination::File => {
+                fs::write(&cli.output_file, context)
+                    .with_context(|| format!("cannot write {}", cli.output_file.display()))?;
+            }
         }
     }
 
-    if let Err(error) = parse_cache.save() {
-        eprintln!("warning: cannot write parse cache: {error:#}");
+    if !cli.dry_run {
+        if let Err(error) = parse_cache.save() {
+            eprintln!("warning: cannot write parse cache: {error:#}");
+        }
     }
 
     if cli.summary {
@@ -1141,6 +1153,10 @@ fn generated_at_unix() -> Result<String> {
 }
 
 fn output_target(cli: &Cli) -> String {
+    if cli.dry_run {
+        return "dry-run".to_owned();
+    }
+
     match cli.output {
         OutputDestination::Clipboard => "clipboard".to_owned(),
         OutputDestination::File => cli.output_file.display().to_string(),
@@ -1208,6 +1224,35 @@ fn print_incremental_summary(counts: &IncrementalCounts) {
     println!("  unchanged: {}", counts.unchanged);
     println!("  skipped: {}", counts.skipped);
     println!("  deleted: {}", counts.deleted);
+}
+
+fn print_dry_run(
+    files: &[ProcessedFile],
+    deleted_files: &[String],
+    estimated_tokens: usize,
+    max_tokens: usize,
+) {
+    println!("dry_run:");
+    println!("  files: {}", files.len());
+    println!("  deleted: {}", deleted_files.len());
+    println!("  estimated_tokens: {estimated_tokens}");
+    println!("  max_tokens: {max_tokens}");
+    println!("selected_files:");
+    for file in files {
+        println!(
+            "  {}  L{}  {} tokens",
+            file.path,
+            file.level.as_u8(),
+            file.token_count
+        );
+    }
+
+    if !deleted_files.is_empty() {
+        println!("deleted_files:");
+        for path in deleted_files {
+            println!("  {path}");
+        }
+    }
 }
 
 fn print_detailed_stats(files: &[ProcessedFile], _stats: &RunStats) {
@@ -1311,6 +1356,7 @@ mod tests {
             project_map_only: false,
             file_hashes: false,
             no_content: false,
+            dry_run: false,
             sort: SortMode::Path,
             directory_summaries: false,
             fail_over_budget: false,
