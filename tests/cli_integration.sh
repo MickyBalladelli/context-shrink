@@ -119,6 +119,13 @@ if grep -Fq 'path="Cargo.toml"' "$tmp_root/incremental-third.xml"; then
   exit 1
 fi
 
+incremental_options="$tmp_root/incremental-options"
+make_golden_repo "$incremental_options"
+"$bin" "$incremental_options" --include 'src/**' --output-file "$tmp_root/incremental-options-seed.xml"
+"$bin" "$incremental_options" --incremental --output-file "$tmp_root/incremental-options-changed.xml"
+grep -Fq 'path="Cargo.toml"' "$tmp_root/incremental-options-changed.xml"
+grep -Fq 'path="src/lib.rs"' "$tmp_root/incremental-options-changed.xml"
+
 incremental_base="$tmp_root/incremental-base"
 incremental_current="$tmp_root/incremental-current"
 make_golden_repo "$incremental_base"

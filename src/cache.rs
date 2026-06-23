@@ -7,14 +7,24 @@ use anyhow::{Context, Result};
 
 use crate::parser::FileVariants;
 
-const HEADER: &[u8] = b"BONSAI_PARSE_CACHE_V1\n";
+const HEADER_V1: &[u8] = b"BONSAI_PARSE_CACHE_V1\n";
+const HEADER_V2: &[u8] = b"BONSAI_PARSE_CACHE_V2\n";
 
 #[derive(Debug)]
 pub struct ParseCache {
     path: PathBuf,
+    metadata: Option<CacheMetadata>,
     entries: HashMap<String, CacheEntry>,
     touched: HashSet<String>,
     dirty: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CacheMetadata {
+    pub include: Vec<String>,
+    pub exclude: Vec<String>,
+    pub respect_gitignore: bool,
+    pub max_file_bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -33,14 +43,15 @@ pub enum CacheStatus {
 
 impl ParseCache {
     pub fn load(path: PathBuf) -> Self {
-        let entries = fs::read(&path)
+        let parsed = fs::read(&path)
             .ok()
             .and_then(|bytes| parse_cache_bytes(&bytes))
             .unwrap_or_default();
 
         Self {
             path,
-            entries,
+            metadata: parsed.metadata,
+            entries: parsed.entries,
             touched: HashSet::new(),
             dirty: false,
         }
@@ -76,12 +87,13 @@ impl ParseCache {
     pub fn load_required(path: PathBuf) -> Result<Self> {
         let bytes = fs::read(&path)
             .with_context(|| format!("cannot read incremental base cache {}", path.display()))?;
-        let entries = parse_cache_bytes(&bytes)
+        let parsed = parse_cache_bytes(&bytes)
             .with_context(|| format!("invalid incremental base cache {}", path.display()))?;
 
         Ok(Self {
             path,
-            entries,
+            metadata: parsed.metadata,
+            entries: parsed.entries,
             touched: HashSet::new(),
             dirty: false,
         })
@@ -110,6 +122,17 @@ impl ParseCache {
         self.dirty = true;
     }
 
+    pub fn metadata_matches(&self, metadata: &CacheMetadata) -> bool {
+        self.metadata.as_ref() == Some(metadata)
+    }
+
+    pub fn set_metadata(&mut self, metadata: CacheMetadata) {
+        if self.metadata.as_ref() != Some(&metadata) {
+            self.metadata = Some(metadata);
+            self.dirty = true;
+        }
+    }
+
     pub fn retain_touched(&mut self) {
         let before = self.entries.len();
         self.entries.retain(|key, _| self.touched.contains(key));
@@ -126,9 +149,18 @@ impl ParseCache {
                 .with_context(|| format!("cannot create cache dir {}", parent.display()))?;
         }
 
-        fs::write(&self.path, format_cache_bytes(&self.entries))
-            .with_context(|| format!("cannot write parse cache {}", self.path.display()))
+        fs::write(
+            &self.path,
+            format_cache_bytes(&self.metadata, &self.entries),
+        )
+        .with_context(|| format!("cannot write parse cache {}", self.path.display()))
     }
+}
+
+#[derive(Debug, Default)]
+struct ParsedCache {
+    metadata: Option<CacheMetadata>,
+    entries: HashMap<String, CacheEntry>,
 }
 
 pub fn cache_path_for_root(root: &Path) -> PathBuf {
@@ -159,8 +191,12 @@ fn modified_ns(metadata: &Metadata) -> u128 {
         .unwrap_or(0)
 }
 
-fn format_cache_bytes(entries: &HashMap<String, CacheEntry>) -> Vec<u8> {
-    let mut output = HEADER.to_vec();
+fn format_cache_bytes(
+    metadata: &Option<CacheMetadata>,
+    entries: &HashMap<String, CacheEntry>,
+) -> Vec<u8> {
+    let mut output = HEADER_V2.to_vec();
+    push_metadata(&mut output, metadata);
     let mut entries = entries.iter().collect::<Vec<_>>();
     entries.sort_by(|(left, _), (right, _)| left.cmp(right));
 
@@ -191,17 +227,108 @@ fn format_cache_bytes(entries: &HashMap<String, CacheEntry>) -> Vec<u8> {
     output
 }
 
+fn push_metadata(output: &mut Vec<u8>, metadata: &Option<CacheMetadata>) {
+    let Some(metadata) = metadata else {
+        output.extend_from_slice(b"OPTIONS 0 -1 0 0\n");
+        return;
+    };
+
+    output.extend_from_slice(
+        format!(
+            "OPTIONS {} {} {} {}\n",
+            u8::from(metadata.respect_gitignore),
+            metadata
+                .max_file_bytes
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "-1".to_owned()),
+            metadata.include.len(),
+            metadata.exclude.len()
+        )
+        .as_bytes(),
+    );
+
+    for pattern in &metadata.include {
+        push_sized_field(output, pattern);
+    }
+
+    for pattern in &metadata.exclude {
+        push_sized_field(output, pattern);
+    }
+}
+
+fn push_sized_field(output: &mut Vec<u8>, value: &str) {
+    output.extend_from_slice(format!("{}\n", value.len()).as_bytes());
+    push_field(output, value);
+}
+
 fn push_field(output: &mut Vec<u8>, value: &str) {
     output.extend_from_slice(value.as_bytes());
     output.push(b'\n');
 }
 
-fn parse_cache_bytes(bytes: &[u8]) -> Option<HashMap<String, CacheEntry>> {
-    if !bytes.starts_with(HEADER) {
+fn parse_cache_bytes(bytes: &[u8]) -> Option<ParsedCache> {
+    if bytes.starts_with(HEADER_V1) {
+        let entries = parse_entries(bytes, HEADER_V1.len())?;
+        return Some(ParsedCache {
+            metadata: None,
+            entries,
+        });
+    }
+
+    if !bytes.starts_with(HEADER_V2) {
         return None;
     }
 
-    let mut cursor = HEADER.len();
+    let mut cursor = HEADER_V2.len();
+    let metadata = parse_metadata(bytes, &mut cursor)?;
+    let entries = parse_entries(bytes, cursor)?;
+
+    Some(ParsedCache {
+        metadata: Some(metadata),
+        entries,
+    })
+}
+
+fn parse_metadata(bytes: &[u8], cursor: &mut usize) -> Option<CacheMetadata> {
+    let line = std::str::from_utf8(read_line(bytes, cursor)?).ok()?;
+    let parts = line.split_whitespace().collect::<Vec<_>>();
+    if parts.len() != 5 || parts[0] != "OPTIONS" {
+        return None;
+    }
+
+    let respect_gitignore = match parts[1] {
+        "0" => false,
+        "1" => true,
+        _ => return None,
+    };
+    let max_file_bytes = match parts[2] {
+        "-1" => None,
+        value => Some(value.parse::<u64>().ok()?),
+    };
+    let include_count = parts[3].parse::<usize>().ok()?;
+    let exclude_count = parts[4].parse::<usize>().ok()?;
+
+    Some(CacheMetadata {
+        include: read_patterns(bytes, cursor, include_count)?,
+        exclude: read_patterns(bytes, cursor, exclude_count)?,
+        respect_gitignore,
+        max_file_bytes,
+    })
+}
+
+fn read_patterns(bytes: &[u8], cursor: &mut usize, count: usize) -> Option<Vec<String>> {
+    let mut patterns = Vec::with_capacity(count);
+    for _ in 0..count {
+        let length = std::str::from_utf8(read_line(bytes, cursor)?)
+            .ok()?
+            .parse::<usize>()
+            .ok()?;
+        patterns.push(read_string(bytes, cursor, length)?);
+    }
+    Some(patterns)
+}
+
+fn parse_entries(bytes: &[u8], mut cursor: usize) -> Option<HashMap<String, CacheEntry>> {
     let mut entries = HashMap::new();
 
     while cursor < bytes.len() {
@@ -290,10 +417,18 @@ mod tests {
             },
         );
 
-        let bytes = format_cache_bytes(&entries);
-        let parsed = parse_cache_bytes(&bytes).unwrap();
-        let entry = parsed.get("/repo/src/lib.rs").unwrap();
+        let metadata = Some(CacheMetadata {
+            include: vec!["src/**".to_owned()],
+            exclude: vec!["**/generated.rs".to_owned()],
+            respect_gitignore: true,
+            max_file_bytes: Some(1024),
+        });
 
+        let bytes = format_cache_bytes(&metadata, &entries);
+        let parsed = parse_cache_bytes(&bytes).unwrap();
+        let entry = parsed.entries.get("/repo/src/lib.rs").unwrap();
+
+        assert_eq!(parsed.metadata, metadata);
         assert_eq!(entry.size, 12);
         assert_eq!(entry.modified_ns, 34);
         assert_eq!(entry.variants.full.as_deref(), Some("fn main() {}\n"));

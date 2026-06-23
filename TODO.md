@@ -2,7 +2,6 @@
 
 ## Incremental Runs
 
-- Store cache metadata for CLI options that affect file selection, so changed `--include`, `--exclude`, `--max-file-bytes`, or gitignore settings cannot create confusing incremental output.
 - Add a cache clear command, like `bonsai cache clear [PATH]`.
 
 ## Output Quality

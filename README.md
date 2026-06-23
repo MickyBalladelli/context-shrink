@@ -254,6 +254,8 @@ Print incremental counts:
 bonsai . --incremental --incremental-summary
 ```
 
+Bonsai stores the file-selection options with the cache. If `--include`, `--exclude`, `--max-file-bytes`, or gitignore handling changes, the next incremental run includes the selected files once instead of comparing against a stale selection.
+
 Write starter agent instructions:
 
 ```sh

@@ -17,7 +17,7 @@ use budget::{
     count_text_tokens, downgrade_largest_file, file_priority_score, optimize_budget, ProcessedFile,
     TokenCounter, TokenizerKind,
 };
-use cache::{cache_path_for_root, CacheStatus, ParseCache};
+use cache::{cache_path_for_root, CacheMetadata, CacheStatus, ParseCache};
 use formatter::{
     format_repository_context_json, format_repository_context_xml, DirectorySummary, FormatOptions,
     RepositoryMetadata,
@@ -159,6 +159,9 @@ fn main() -> Result<()> {
     let token_counter = TokenCounter::new(cli.tokenizer)?;
     let mut parse_cache = ParseCache::load(cache_path_for_root(&root));
     let incremental_base = load_incremental_base(&cli)?;
+    let cache_metadata = cache_metadata(&cli);
+    let baseline_metadata_matches =
+        baseline_metadata_matches(&incremental_base, &parse_cache, &cache_metadata);
 
     let paths = collect_code_files(
         &root,
@@ -193,6 +196,7 @@ fn main() -> Result<()> {
         let delta = classify_file(
             &incremental_base,
             &parse_cache,
+            baseline_metadata_matches,
             &path,
             &relative_path,
             &file_metadata,
@@ -220,9 +224,11 @@ fn main() -> Result<()> {
         &cli,
         &incremental_base,
         &parse_cache,
+        baseline_metadata_matches,
         &current_relative_paths,
     )?;
     parse_cache.retain_touched();
+    parse_cache.set_metadata(cache_metadata);
 
     let raw_context = if cli.stats {
         let metadata = RepositoryMetadata {
@@ -424,6 +430,15 @@ fn max_file_bytes(cli: &Cli) -> Option<u64> {
     }
 }
 
+fn cache_metadata(cli: &Cli) -> CacheMetadata {
+    CacheMetadata {
+        include: cli.include.clone(),
+        exclude: cli.exclude.clone(),
+        respect_gitignore: cli.respect_gitignore,
+        max_file_bytes: max_file_bytes(cli),
+    }
+}
+
 #[derive(Debug)]
 enum IncrementalBase {
     Directory(PathBuf),
@@ -479,6 +494,7 @@ fn load_incremental_base(cli: &Cli) -> Result<Option<IncrementalBase>> {
 fn classify_file(
     incremental_base: &Option<IncrementalBase>,
     parse_cache: &ParseCache,
+    baseline_metadata_matches: bool,
     path: &Path,
     relative_path: &str,
     metadata: &fs::Metadata,
@@ -489,9 +505,29 @@ fn classify_file(
             directory_file_delta(&base_path, path, metadata)
         }
         Some(IncrementalBase::Cache(base_cache)) => {
+            if !baseline_metadata_matches {
+                return Ok(FileDelta::Added);
+            }
             Ok(cache_status_to_delta(base_cache.status(path, metadata)))
         }
-        None => Ok(cache_status_to_delta(parse_cache.status(path, metadata))),
+        None => {
+            if !baseline_metadata_matches {
+                return Ok(FileDelta::Added);
+            }
+            Ok(cache_status_to_delta(parse_cache.status(path, metadata)))
+        }
+    }
+}
+
+fn baseline_metadata_matches(
+    incremental_base: &Option<IncrementalBase>,
+    parse_cache: &ParseCache,
+    metadata: &CacheMetadata,
+) -> bool {
+    match incremental_base {
+        Some(IncrementalBase::Cache(base_cache)) => base_cache.metadata_matches(metadata),
+        Some(IncrementalBase::Directory(_)) => true,
+        None => parse_cache.metadata_matches(metadata),
     }
 }
 
@@ -563,6 +599,7 @@ fn deleted_count(
     cli: &Cli,
     incremental_base: &Option<IncrementalBase>,
     parse_cache: &ParseCache,
+    baseline_metadata_matches: bool,
     current_relative_paths: &HashSet<String>,
 ) -> Result<usize> {
     match incremental_base {
@@ -580,8 +617,11 @@ fn deleted_count(
                 .difference(current_relative_paths)
                 .count())
         }
-        Some(IncrementalBase::Cache(base_cache)) => Ok(base_cache.deleted_count()),
-        None if cli.incremental => Ok(parse_cache.deleted_count()),
+        Some(IncrementalBase::Cache(base_cache)) if baseline_metadata_matches => {
+            Ok(base_cache.deleted_count())
+        }
+        Some(IncrementalBase::Cache(_)) => Ok(0),
+        None if cli.incremental && baseline_metadata_matches => Ok(parse_cache.deleted_count()),
         None => Ok(0),
     }
 }
