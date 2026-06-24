@@ -78,6 +78,13 @@ struct Cli {
     #[arg(long)]
     project_map_only: bool,
 
+    #[arg(
+        long,
+        value_name = "TOKENS",
+        help = "When --max-tokens is below this value, output metadata, project map, and directory summaries only"
+    )]
+    map_only_under: Option<usize>,
+
     #[arg(long, value_enum, default_value_t = ProjectMapMode::Flat)]
     project_map: ProjectMapMode,
 
@@ -378,6 +385,9 @@ fn main() -> Result<()> {
 
     if let Some(max_file_tokens) = max_file_tokens(&cli) {
         cap_file_tokens(&mut files, max_file_tokens, &token_counter);
+    }
+    if uses_map_only_fallback(&cli) {
+        set_files_to_tree_map(&mut files, &token_counter);
     }
 
     let raw_context = if cli.stats {
@@ -1289,23 +1299,38 @@ fn format_context(
 }
 
 fn format_options(files: &[ProcessedFile], cli: &Cli, deleted_files: &[String]) -> FormatOptions {
+    let map_only_fallback = uses_map_only_fallback(cli);
     FormatOptions {
         project_map_only: cli.project_map_only,
         project_map_mode: cli.project_map.into(),
         include_file_hashes: cli.file_hashes,
         include_token_counts: !cli.no_token_counts,
-        include_files: !cli.project_map_only && !cli.no_content,
-        include_content: !cli.project_map_only && !cli.no_content,
-        deleted_files: if cli.project_map_only {
+        include_files: !cli.project_map_only && !cli.no_content && !map_only_fallback,
+        include_content: !cli.project_map_only && !cli.no_content && !map_only_fallback,
+        deleted_files: if cli.project_map_only || map_only_fallback {
             Vec::new()
         } else {
             deleted_files.to_vec()
         },
-        directory_summaries: if cli.directory_summaries && !cli.project_map_only {
+        directory_summaries: if (cli.directory_summaries || map_only_fallback)
+            && !cli.project_map_only
+        {
             build_directory_summaries(files)
         } else {
             Vec::new()
         },
+    }
+}
+
+fn uses_map_only_fallback(cli: &Cli) -> bool {
+    cli.map_only_under
+        .is_some_and(|tokens| cli.max_tokens < tokens)
+}
+
+fn set_files_to_tree_map(files: &mut [ProcessedFile], counter: &TokenCounter) {
+    for file in files {
+        file.level = CompressionLevel::TreeMap;
+        file.token_count = count_text_tokens(file.content(), counter);
     }
 }
 
@@ -1691,6 +1716,54 @@ mod tests {
         assert!(!context.contains("src/generated/deep/file.rs"));
     }
 
+    #[test]
+    fn map_only_under_outputs_map_and_directory_summaries_without_files() {
+        let mut cli = test_cli(OutputFormat::Xml);
+        cli.max_tokens = 100;
+        cli.map_only_under = Some(500);
+        let counter = TokenCounter::new(cli.tokenizer).unwrap();
+        let metadata = RepositoryMetadata {
+            generated_at: "1234567890".to_owned(),
+            repo_root: "/tmp/demo".to_owned(),
+            max_tokens: cli.max_tokens,
+            compression_level: 2,
+            file_count: 2,
+        };
+        let mut files = vec![
+            ProcessedFile::new(
+                "Cargo.toml".to_owned(),
+                CompressionLevel::Skeleton,
+                FileVariants {
+                    full: None,
+                    skeleton: "name = \"demo\"".to_owned(),
+                    tree_map: "Cargo manifest".to_owned(),
+                },
+            ),
+            ProcessedFile::new(
+                "src/lib.rs".to_owned(),
+                CompressionLevel::Skeleton,
+                FileVariants {
+                    full: None,
+                    skeleton: "pub fn greet() { ... }".to_owned(),
+                    tree_map: "pub fn greet()".to_owned(),
+                },
+            ),
+        ];
+        set_files_to_tree_map(&mut files, &counter);
+
+        let (_files, context, output_tokens, _dropped) =
+            fit_formatted_context(files, &metadata, &cli, &counter, &["old.rs".to_owned()])
+                .unwrap();
+
+        assert!(output_tokens > 0);
+        assert!(context.contains("<project_map>"));
+        assert!(context.contains("<directory_summaries>"));
+        assert!(context.contains("<directory path=\"src\""));
+        assert!(!context.contains("<files>"));
+        assert!(!context.contains("<deleted_files>"));
+        assert!(context.contains("level=\"3\""));
+    }
+
     fn assert_final_token_count_matches(format: OutputFormat) {
         let cli = test_cli(format);
         let counter = TokenCounter::new(cli.tokenizer).unwrap();
@@ -1730,6 +1803,7 @@ mod tests {
             output_file: PathBuf::from("bonsai.xml"),
             format,
             project_map_only: false,
+            map_only_under: None,
             project_map: ProjectMapMode::Flat,
             file_hashes: false,
             no_token_counts: false,

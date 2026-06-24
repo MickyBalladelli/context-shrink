@@ -265,6 +265,12 @@ Add directory token summaries:
 bonsai . --directory-summaries
 ```
 
+Use only metadata, the project map, and directory summaries when the requested budget is tiny:
+
+```sh
+bonsai . --max-tokens 800 --map-only-under 1000
+```
+
 Fail if output cannot fit after maximum compression:
 
 ```sh
