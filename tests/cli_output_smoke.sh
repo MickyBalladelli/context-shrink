@@ -97,6 +97,19 @@ fi
 "$bin" "$repo" --file-hashes --project-map-only --output-file "$tmp_root/hashes.xml"
 grep -Eq 'hash="[0-9a-f]{64}"' "$tmp_root/hashes.xml"
 
+cap_repo="$tmp_root/cap-repo"
+mkdir -p "$cap_repo/src"
+cat > "$cap_repo/src/huge.rs" <<'RS'
+pub fn huge() {
+    let alpha = "alpha alpha alpha alpha alpha alpha alpha";
+    let beta = "beta beta beta beta beta beta beta";
+    let gamma = "gamma gamma gamma gamma gamma gamma gamma";
+    println!("{alpha}{beta}{gamma}");
+}
+RS
+"$bin" "$cap_repo" --max-file-tokens 4 --project-map-only --output-file "$tmp_root/capped.xml"
+grep -Fq 'path="src/huge.rs" level="3"' "$tmp_root/capped.xml"
+
 "$bin" "$repo" --dry-run --output-file "$tmp_root/dry-run.xml" > "$tmp_root/dry-run.txt"
 grep -Fq 'dry_run:' "$tmp_root/dry-run.txt"
 grep -Fq '  estimated_tokens:' "$tmp_root/dry-run.txt"

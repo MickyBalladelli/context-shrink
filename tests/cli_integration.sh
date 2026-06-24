@@ -30,10 +30,11 @@ completion_snippets() {
   printf '[bash]\n'
   grep -F '            bonsai,init-agent)' "$bash_file"
   grep -F '            bonsai,completions)' "$bash_file"
-  grep -F -- '--no-respect-gitignore --exclude-generated --print-files' "$bash_file" | head -n 1
+  grep -F -- '--max-file-bytes --max-file-tokens --level' "$bash_file" | head -n 1
   grep -F '            opts="-h --tokenizer --json --help [PATH]"' "$bash_file"
   printf '[zsh]\n'
   grep -F -- "'--project-map=[]:PROJECT_MAP:(flat compact)' \\" "$zsh_file"
+  grep -F -- "'--max-file-tokens=[Cap each file to this many tokens before global budget optimization; 0 disables the cap]:MAX_FILE_TOKENS:_default' \\" "$zsh_file"
   grep -F -- "'--no-token-counts[Omit token count fields from XML and JSON output]' \\" "$zsh_file"
   grep -F -- "'--changed-since=[Only include tracked changes and untracked files compared with this git ref]:GIT_REF:_default' \\" "$zsh_file"
   grep -F -- "'--exclude-generated[Skip minified, vendored, generated, and lockfile-like files unless --include matches them]' \\" "$zsh_file"
@@ -41,6 +42,7 @@ completion_snippets() {
   grep -F -- "'--json[]' \\" "$zsh_file"
   grep -F -- "'completions:Generate shell completions' \\" "$zsh_file" | head -n 1
   printf '[fish]\n'
+  grep -F 'complete -c bonsai -n "__fish_bonsai_needs_command" -l max-file-tokens -d '"'"'Cap each file to this many tokens before global budget optimization; 0 disables the cap'"'"' -r' "$fish_file"
   grep -F 'complete -c bonsai -n "__fish_bonsai_needs_command" -l changed-since -d '"'"'Only include tracked changes and untracked files compared with this git ref'"'"' -r' "$fish_file"
   grep -F 'complete -c bonsai -n "__fish_bonsai_needs_command" -l no-token-counts -d '"'"'Omit token count fields from XML and JSON output'"'"'' "$fish_file"
   grep -F 'complete -c bonsai -n "__fish_bonsai_needs_command" -l exclude-generated -d '"'"'Skip minified, vendored, generated, and lockfile-like files unless --include matches them'"'"'' "$fish_file"

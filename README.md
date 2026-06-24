@@ -277,6 +277,12 @@ Drop lowest-priority files if maximum compression still does not fit:
 bonsai . --max-tokens 12000 --drop-low-priority
 ```
 
+Cap very large files before the global budget pass:
+
+```sh
+bonsai . --max-file-tokens 2000
+```
+
 ## Change-Focused Context
 
 Only include files changed since the last cached local run:

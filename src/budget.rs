@@ -159,6 +159,24 @@ pub fn downgrade_largest_file(files: &mut [ProcessedFile], counter: &TokenCounte
     true
 }
 
+pub fn cap_file_tokens(
+    files: &mut [ProcessedFile],
+    max_file_tokens: usize,
+    counter: &TokenCounter,
+) {
+    refresh_counts(files, counter);
+
+    for file in files {
+        while file.token_count > max_file_tokens && file.level != CompressionLevel::TreeMap {
+            downgrade_file(file, counter);
+        }
+
+        if file.token_count > max_file_tokens {
+            truncate_current_file(file, max_file_tokens, counter);
+        }
+    }
+}
+
 pub fn count_text_tokens(text: &str, counter: &TokenCounter) -> usize {
     counter.count(text)
 }
@@ -184,6 +202,47 @@ fn downgrade_file(file: &mut ProcessedFile, counter: &TokenCounter) {
         CompressionLevel::TreeMap => CompressionLevel::TreeMap,
     };
     file.token_count = counter.count(file.content());
+}
+
+fn truncate_current_file(file: &mut ProcessedFile, max_tokens: usize, counter: &TokenCounter) {
+    let truncated = truncate_text_tokens(file.content(), max_tokens, counter);
+    match file.level {
+        CompressionLevel::Full => file.variants.full = Some(truncated),
+        CompressionLevel::Skeleton => file.variants.skeleton = truncated,
+        CompressionLevel::TreeMap => file.variants.tree_map = truncated,
+    }
+    file.token_count = counter.count(file.content());
+}
+
+fn truncate_text_tokens(text: &str, max_tokens: usize, counter: &TokenCounter) -> String {
+    if counter.count(text) <= max_tokens {
+        return text.to_owned();
+    }
+
+    let chars = text.chars().collect::<Vec<_>>();
+    let mut low = 0usize;
+    let mut high = chars.len();
+
+    while low < high {
+        let mid = (low + high).div_ceil(2);
+        let candidate = format!("{}...", chars[..mid].iter().collect::<String>().trim_end());
+        if counter.count(&candidate) <= max_tokens {
+            low = mid;
+        } else {
+            high = mid - 1;
+        }
+    }
+
+    let truncated = chars[..low]
+        .iter()
+        .collect::<String>()
+        .trim_end()
+        .to_owned();
+    if truncated.is_empty() {
+        "...".to_owned()
+    } else {
+        format!("{truncated}...")
+    }
 }
 
 fn pick_downgrade_candidate(files: &[ProcessedFile]) -> Option<usize> {
@@ -355,6 +414,25 @@ mod tests {
 
         assert_eq!(optimized[0].level, CompressionLevel::Full);
         assert_ne!(optimized[1].level, CompressionLevel::Full);
+    }
+
+    #[test]
+    fn caps_single_file_before_global_budget() {
+        let mut files = vec![processed_file(
+            "src/huge.rs",
+            CompressionLevel::Skeleton,
+            "fn huge() { println!(\"full\"); }",
+            "fn huge() { let alpha = 1; let beta = 2; let gamma = 3; let delta = 4; }",
+            "fn huge alpha beta gamma delta epsilon zeta eta theta iota kappa lambda",
+        )];
+        let counter = test_counter();
+        let max_tokens = 5;
+
+        cap_file_tokens(&mut files, max_tokens, &counter);
+
+        assert_eq!(files[0].level, CompressionLevel::TreeMap);
+        assert!(files[0].content().ends_with("..."));
+        assert!(files[0].token_count <= max_tokens);
     }
 
     #[test]

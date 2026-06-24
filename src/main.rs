@@ -17,8 +17,8 @@ use clap_complete::{generate, Shell};
 use sha2::{Digest, Sha256};
 
 use budget::{
-    count_text_tokens, downgrade_largest_file, file_priority_score, optimize_budget, ProcessedFile,
-    TokenCounter, TokenizerKind,
+    cap_file_tokens, count_text_tokens, downgrade_largest_file, file_priority_score,
+    optimize_budget, ProcessedFile, TokenCounter, TokenizerKind,
 };
 use cache::{cache_path_for_root, CacheDiagnostics, CacheMetadata, CacheStatus, ParseCache};
 use formatter::{
@@ -56,6 +56,12 @@ struct Cli {
         help = "Skip files larger than this many bytes; 0 disables the cap"
     )]
     max_file_bytes: u64,
+
+    #[arg(
+        long,
+        help = "Cap each file to this many tokens before global budget optimization; 0 disables the cap"
+    )]
+    max_file_tokens: Option<usize>,
 
     #[arg(long, default_value_t = 2)]
     level: u8,
@@ -369,6 +375,10 @@ fn main() -> Result<()> {
     incremental_counts.deleted = deleted_files.len();
     parse_cache.retain_touched();
     parse_cache.set_metadata(cache_metadata);
+
+    if let Some(max_file_tokens) = max_file_tokens(&cli) {
+        cap_file_tokens(&mut files, max_file_tokens, &token_counter);
+    }
 
     let raw_context = if cli.stats {
         let metadata = RepositoryMetadata {
@@ -835,6 +845,10 @@ fn max_file_bytes(cli: &Cli) -> Option<u64> {
     } else {
         Some(cli.max_file_bytes)
     }
+}
+
+fn max_file_tokens(cli: &Cli) -> Option<usize> {
+    cli.max_file_tokens.filter(|tokens| *tokens > 0)
 }
 
 fn validate_delta_options(cli: &Cli) -> Result<()> {
@@ -1710,6 +1724,7 @@ mod tests {
             max_tokens: 12000,
             tokenizer: TokenizerKind::default(),
             max_file_bytes: 1_048_576,
+            max_file_tokens: None,
             level: 2,
             output: OutputDestination::File,
             output_file: PathBuf::from("bonsai.xml"),
